@@ -84,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- routers ----------------------------------------------------------
     from backend.api import (
     ai,
+    alerts,
     city,
     dashboard,
     data,
@@ -98,10 +99,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     search,
     simulation,
     system,
+    temporal,
 )
 
     for module in (
     health,
+    alerts,
     data,
     prediction,
     simulation,
@@ -116,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     search,
     system,
     live,
+    temporal,
 ):
      app.include_router(module.router)
     @app.get("/")

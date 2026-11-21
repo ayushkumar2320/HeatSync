@@ -1,5 +1,3 @@
-version: "3.8"
-
 # =============================================================================
 # Urban Digital Twin - local stack
 #
@@ -34,8 +32,8 @@ services:
   # --- Backend API -------------------------------------------------------
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: urban-twin-backend
     environment:
       # UDT_* variables are read by backend/config/settings.py. The database

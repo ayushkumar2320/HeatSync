@@ -14,7 +14,7 @@ const GROUP_LABELS = {
 // Every value comes from real backend probes / monitoring reports.
 // Uses LiveDataContext as the single source of truth for weather and AQI.
 export const EnvironmentPanel = ({ monitoring, liveWeather, airQuality, modelInfo, health }) => {
-  const { weather: ctxWeather, airQuality: ctxAq, weatherAge, aqiAge, getFreshnessStatus, formatAge } = useLiveData();
+  const { weather: ctxWeather, airQuality: ctxAq, weatherAge, aqiAge, getFreshnessStatus } = useLiveData();
 
   // Use context data as primary source, fall back to props
   const weatherData = ctxWeather || liveWeather;
@@ -141,7 +141,7 @@ export const EnvironmentPanel = ({ monitoring, liveWeather, airQuality, modelInf
               {modelInfo?.available === true ? (
                 <span>
                   XGBoost · {modelInfo.feature_count || 58} features
-                  <span style={{ color: '#16a34a', fontWeight: 600, marginLeft: '4px' }}>MODEL</span>
+                  <span style={{ color: 'var(--hs-success)', fontWeight: 600, marginLeft: '4px' }}>MODEL</span>
                 </span>
               ) : (
                 <span style={{ color: 'var(--text-muted)' }}>UNAVAILABLE — model artifact not loaded</span>

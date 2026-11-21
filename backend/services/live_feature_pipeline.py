@@ -125,7 +125,7 @@ class FeatureProvenance:
         self.feature_name = feature_name
         self.source: str | None = None
         self.timestamp: str | None = None
-        self.status: str = "unavailable"  # live | modelled | unavailable
+        self.status: str = "UNAVAILABLE"  # LIVE | LATEST_OBSERVATION | STATIC_GIS | DERIVED | UNAVAILABLE
         self.raw_value: float | None = None
         self.normalized_value: float | None = None
 

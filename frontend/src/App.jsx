@@ -1,652 +1,324 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense, Component } from 'react';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  Box, BarChart3, Layers, X, Clock, Activity, Flame, Wind, Sprout,
-  BrainCircuit, Mountain, Bot
-} from 'lucide-react';
 import { LiveDataProvider, useLiveData } from './context/LiveDataContext';
-import { Header } from './components/Header';
-import { CitySearch } from './components/CitySearch';
-import { DigitalTwinMap3D } from './components/DigitalTwinMap3D';
-import { LayerManager } from './components/LayerManager';
-import { LocationIntelligencePanel } from './components/LocationIntelligencePanel';
-import { TimeMachine } from './components/TimeMachine';
-import { BeforeAfterComparison } from './components/BeforeAfterComparison';
-import { AnalyticsCharts } from './components/AnalyticsCharts';
-import { AIAssistant } from './components/AIAssistant';
-import { MonitoringPanel } from './components/MonitoringPanel';
-import { SystemStatusBar } from './components/SystemStatusBar';
-import { SystemStatusPanel } from './components/SystemStatusPanel';
-import { EnvironmentPanel } from './components/EnvironmentPanel';
-import { HelpModal } from './components/HelpModal';
+import { NavigationRail, MobileNavigation } from './layout/Navigation';
 import { fetchMonitoringStatus, fetchEnvironmentSummary, buildAvailability } from './services/thematicData';
 import { fetchModelInfo, fetchAIStatus, fetchCurrentHeat } from './services/backendClient';
-import {
-  fetchSystemHealth, buildSystemStatus, fetchLiveWeather, fetchLiveAirQuality
-} from './services/systemHealth';
+import { fetchSystemHealth, buildSystemStatus } from './services/systemHealth';
+import { fetchAlertSummary } from './services/alertService';
+import { TopSystemStatus } from './components/TopSystemStatus';
+import './styles/top-system-status.css';
 
-const INITIAL_LAYERS = {
-  CITY: { buildings: true, roads: true, water: true, green: true, trees: true, boundary: true },
-  VEGETATION: { ndvi: false, green_cover: false, vegetation_density: false },
-  'LAND COVER': { land_cover: false },
-  HEAT: { lst: false, predicted_lst: true, heat_class: false },
-  'AIR QUALITY': { aqi: false, pm25: false, pm10: false, no2: false, so2: false, o3: false, co: false },
-  TERRAIN: { elevation: false, slope: false, aspect: false, hillshade: false, terrain_3d: false },
-  WEATHER: {}
-};
+// Lazy-load heavy page components
+const OverviewPage = lazy(() => import('./pages/OverviewPage'));
+const HeatMapPage = lazy(() => import('./pages/HeatMapPage'));
+const AlertCentrePage = lazy(() => import('./pages/AlertCentrePage'));
+const SatellitePage = lazy(() => import('./pages/SatellitePage'));
+const DriversPage = lazy(() => import('./pages/DriversPage'));
+const TwinPage = lazy(() => import('./pages/TwinPage'));
+const SandboxPage = lazy(() => import('./pages/SandboxPage'));
+const RoutingPage = lazy(() => import('./pages/RoutingPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const AICopilotPage = lazy(() => import('./pages/AICopilotPage'));
+const ForecastPage = lazy(() => import('./pages/ForecastPage'));
+const CityPlanningPage = lazy(() => import('./pages/CityPlanningPage'));
 
-// Quick domain chips — one-click access to the most important overlays.
-const DOMAIN_CHIPS = [
-  { key: 'heat', label: 'Heat', layerKey: 'lst', group: 'HEAT', icon: Flame, color: '#dc2626' },
-  { key: 'aqi', label: 'AQI', layerKey: 'aqi', group: 'AIR QUALITY', icon: Wind, color: '#d97706' },
-  { key: 'veg', label: 'Vegetation', layerKey: 'ndvi', group: 'VEGETATION', icon: Sprout, color: '#16a34a' },
-  { key: 'model', label: 'Model', layerKey: 'predicted_lst', group: 'HEAT', icon: BrainCircuit, color: '#9333ea' },
-  { key: 'terrain', label: 'Terrain', layerKey: 'terrain_3d', group: 'TERRAIN', icon: Mountain, color: '#8c510a' }
-];
+/* --------------------------------------------------------------------------
+   Page transition wrapper — Framer Motion
+   -------------------------------------------------------------------------- */
+const PageTransition = ({ children, pageKey }) => (
+  <motion.div
+    key={pageKey}
+    initial={{ opacity: 0, y: 6 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -6 }}
+    transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+    style={{ width: '100%', height: '100%' }}
+  >
+    {children}
+  </motion.div>
+);
 
-// Four primary modes — the map is always the centre of the product.
-const MODES = [
-  { key: 'city', label: 'City', icon: Box, title: '3D city digital twin' },
-  { key: 'environment', label: 'Environment', icon: Mountain, title: 'LST · AQI · NDVI · terrain · weather' },
-  { key: 'decision', label: 'Decision', icon: Layers, title: 'Scenario simulator' }
-];
+/* --------------------------------------------------------------------------
+   Loading fallback
+   -------------------------------------------------------------------------- */
+const PageLoader = () => (
+  <div className="hs-page-loader">
+    <div className="hs-page-loader-spinner" />
+    <span className="hs-label">Loading...</span>
+  </div>
+);
 
-const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // weather + health refresh (Phase 20)
+/* --------------------------------------------------------------------------
+   Error boundary — prevents one crashed page from taking down the whole app
+   -------------------------------------------------------------------------- */
+class PageErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, _info) {
+    console.error('Page error boundary caught:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="hs-page-content" style={{ padding: 'var(--hs-space-8)', textAlign: 'center' }}>
+          <h2 style={{ color: 'var(--hs-critical)', fontFamily: 'var(--hs-font-display)' }}>
+            Page Error
+          </h2>
+          <p style={{ color: 'var(--hs-text-muted)', fontFamily: 'var(--hs-font-body)', fontSize: 'var(--hs-text-sm)', marginTop: 'var(--hs-space-4)' }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            className="hs-btn-secondary"
+            style={{ marginTop: 'var(--hs-space-4)' }}
+            onClick={() => this.setState({ hasError: false, error: null })}
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
-// Inner App component that uses the LiveDataContext
+/* --------------------------------------------------------------------------
+   AnimatedRoutes — wraps Routes with AnimatePresence for page transitions
+   -------------------------------------------------------------------------- */
+function AnimatedRoutes({ sharedProps }) {
+  const location = useLocation();
+  const pageKey = location.pathname;
+
+  return (
+    <AnimatePresence mode="wait">
+      <Suspense fallback={<PageLoader />} key={pageKey}>
+        <PageTransition pageKey={pageKey}>
+          <PageErrorBoundary key={pageKey}>
+            <Routes location={location}>
+              <Route path="/" element={<OverviewPage {...sharedProps} />} />
+              <Route path="/heatmap" element={<HeatMapPage {...sharedProps} />} />
+              <Route path="/alerts" element={<AlertCentrePage {...sharedProps} />} />
+              <Route path="/satellite" element={<SatellitePage {...sharedProps} />} />
+              <Route path="/drivers" element={<DriversPage {...sharedProps} />} />
+              <Route path="/twin" element={<TwinPage {...sharedProps} />} />
+              <Route path="/sandbox" element={<SandboxPage {...sharedProps} />} />
+              <Route path="/routing" element={<RoutingPage {...sharedProps} />} />
+              <Route path="/reports" element={<ReportsPage {...sharedProps} />} />
+              <Route path="/forecast" element={<ForecastPage {...sharedProps} />} />
+              <Route path="/planning" element={<CityPlanningPage {...sharedProps} />} />
+              <Route path="/ai" element={<AICopilotPage {...sharedProps} />} />
+              <Route path="*" element={<OverviewPage {...sharedProps} />} />
+            </Routes>
+          </PageErrorBoundary>
+        </PageTransition>
+      </Suspense>
+    </AnimatePresence>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   AppInner — the main app shell (requires LiveDataProvider context)
+   -------------------------------------------------------------------------- */
 function AppInner() {
-  const {
-    weather: liveWeather,
-    airQuality,
-    prediction: snapshotPrediction,
-    snapshotId,
-    generatedAt,
-    snapshotLoading,
-    connectionState,
-    freshness,
-    refreshNow: refreshSnapshot,
-  } = useLiveData();
-  const [theme, setTheme] = useState('light');
-  const [mode, setMode] = useState('city'); // city | environment | decision
+  const navigate = useNavigate();
+  const { weather: liveWeather, airQuality, prediction, snapshotId, freshness, connectionState } = useLiveData();
+  const [theme, setTheme] = useState('dark');
+  const [isMobile, setIsMobile] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
 
-  // --- layer state ------------------------------------------------------ #
-  const [layers, setLayers] = useState(INITIAL_LAYERS);
-  const [opacities, setOpacities] = useState({});
-  const [showCooling, setShowCooling] = useState(false);
-  const [coolingGeoJson, setCoolingGeoJson] = useState(null);
-  const [routeData, setRouteData] = useState(null);
-  const [availability, setAvailability] = useState({ osm: true });
-  const [overlayMeta, setOverlayMeta] = useState({});
+  // Lite Mode State (persisted in localStorage to protect 8GB RAM machines)
+  const [liteMode, setLiteMode] = useState(() => {
+    return localStorage.getItem('heatsync_lite_mode') === 'true';
+  });
 
-  // --- other data (non-snapshot) ------------------------------------------ #
+  const toggleLiteMode = useCallback(() => {
+    setLiteMode(prev => {
+      const next = !prev;
+      localStorage.setItem('heatsync_lite_mode', String(next));
+      return next;
+    });
+  }, []);
+
+  // Shared data state
   const [monitoring, setMonitoring] = useState(null);
   const [environmentSummary, setEnvironmentSummary] = useState(null);
   const [modelInfo, setModelInfo] = useState(null);
   const [aiStatus, setAiStatus] = useState(null);
   const [currentPrediction, setCurrentPrediction] = useState(null);
-
-  // --- system health (replaces the old "1/11 APIs" audit) ---------------- #
+  const [alertSummary, setAlertSummary] = useState(null);
   const [health, setHealth] = useState(null);
   const [healthLoading, setHealthLoading] = useState(true);
-  const [healthError, setHealthError] = useState(null);
+  const [availability, setAvailability] = useState({ osm: true });
+  const [overlayMeta, setOverlayMeta] = useState({});
+
+  // System status
   const systemStatus = useMemo(
-    () => buildSystemStatus(health, healthError),
-    [health, healthError]
+    () => buildSystemStatus(health),
+    [health]
   );
 
-  // --- interactions ----------------------------------------------------- #
-  const [selectedLocation, setSelectedLocation] = useState(null);
-  const [flyTo, setFlyTo] = useState(null);
-  const [scenarioOverlay, setScenarioOverlay] = useState(null);
-  const [showAi, setShowAi] = useState(false);
-  const [showTimeMachine, setShowTimeMachine] = useState(false);
-  const [historicalDate, setHistoricalDate] = useState(null);
-  const [historicalLayerData, setHistoricalLayerData] = useState(null);
-  const [showMonitoringDrawer, setShowMonitoringDrawer] = useState(false);
-  const [drawer, setDrawer] = useState(null); // 'layers' (mobile)
-  const [showHelp, setShowHelp] = useState(false);
-  const [showSystemStatus, setShowSystemStatus] = useState(false);
-
+  // Theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // --- system health + live data loaders ---------------------------------- #
-  const loadSystemHealth = useCallback(() => {
-    setHealthLoading(true);
-    setHealthError(null);
-    fetchSystemHealth()
-      .then(setHealth)
-      .catch((err) => { setHealth(null); setHealthError(err); })
-      .finally(() => setHealthLoading(false));
+  // Mobile detection
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Use snapshot-based refresh instead of individual API calls
-  const handleRefresh = useCallback(() => {
-    loadSystemHealth();
-    refreshSnapshot();
-    // Also refresh current heat prediction
-    fetchCurrentHeat()
-      .then((d) => { if (d?.success) setCurrentPrediction(d); })
-      .catch(() => {});
-  }, [loadSystemHealth, refreshSnapshot]);
-
-
-  const handleRouteResult = (data) => {
-  setRouteData(data);
-  };  // --- boot -------------------------------------------------------------- #
-useEffect(() => {
-  fetch('/overlays/overlays.json')
-    .then((r) => (r.ok ? r.json() : null))
-    .then((manifest) => {
-      if (manifest?.overlays) {
-        setOverlayMeta(manifest.overlays);
-      }
-    })
-    .catch(() => {});
-
-  loadSystemHealth();
-  // Snapshot is fetched by LiveDataProvider on mount
-
-  fetchMonitoringStatus().then((status) => {
-    setMonitoring(status);
-    setAvailability(buildAvailability(status));
-  });
-
-  fetchEnvironmentSummary().then(setEnvironmentSummary);
-
-  fetchModelInfo()
-    .then(setModelInfo)
-    .catch(() =>
-      setModelInfo({
-        available: false,
-        status: 'model_unavailable',
-        message: 'Model status API unreachable.',
+  // Boot: load all shared data
+  useEffect(() => {
+    fetchSystemHealth().then(setHealth).catch(() => setHealth(null)).finally(() => setHealthLoading(false));
+    fetchMonitoringStatus().then(status => { setMonitoring(status); setAvailability(buildAvailability(status)); });
+    fetchEnvironmentSummary().then(setEnvironmentSummary);
+    fetchModelInfo().then(setModelInfo).catch(() => setModelInfo({ available: false }));
+    fetchAIStatus().then(setAiStatus).catch(() => setAiStatus({ available: false }));
+    fetchAlertSummary().then(setAlertSummary).catch(() => {});
+    fetchCurrentHeat().then(d => { if (d?.success) setCurrentPrediction(d); }).catch(() => {});
+    fetch('/overlays/overlays.json')
+      .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+      .then((data) => {
+        const map = {};
+        Object.values(data.overlays || {}).forEach((o) => { map[o.key] = o; });
+        setOverlayMeta(map);
       })
-    );
-
-  fetchAIStatus()
-    .then(setAiStatus)
-    .catch(() =>
-      setAiStatus({
-        available: false,
-        status: 'offline',
-        message: 'AI status API unreachable.',
-      })
-    );
-
-  // Fetch current predicted LST from the live feature pipeline
-  fetchCurrentHeat().then((d) => { if (d.success) setCurrentPrediction(d); })
-    .catch(() => setCurrentPrediction(null));
-}, [loadSystemHealth]);
-
-// --- periodic refresh (health + current prediction) ----------- #
-// Weather/AQI refresh is handled by LiveDataProvider
-useEffect(() => {
-  const timer = setInterval(() => {
-    loadSystemHealth();
-    // Also refresh current heat prediction so the thermal map stays current
-    fetchCurrentHeat()
-      .then((d) => { if (d?.success) setCurrentPrediction(d); })
-      .catch(() => {});
-  }, REFRESH_INTERVAL_MS);
-
-  return () => clearInterval(timer);
-}, [loadSystemHealth]);
-
-  // --- layer setters ------------------------------------------------------ #
-  const setLayer = useCallback((group, key, value) => {
-    setLayers((prev) => {
-      const nextGroup = { ...prev[group] };
-      if (value && group !== 'CITY') {
-        Object.keys(nextGroup).forEach((k) => { nextGroup[k] = false; });
-      }
-      nextGroup[key] = value;
-      return { ...prev, [group]: nextGroup };
-    });
+      .catch((err) => console.warn('App: Failed to load overlays.json', err));
   }, []);
 
-  const setOpacity = useCallback((key, value) => {
-    setOpacities((prev) => ({ ...prev, [key]: value }));
+  // Periodic refresh
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchSystemHealth().then(setHealth).catch(() => {});
+      fetchAlertSummary().then(setAlertSummary).catch(() => {});
+      fetchCurrentHeat().then(d => { if (d?.success) setCurrentPrediction(d); }).catch(() => {});
+    }, 60 * 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  const resetAllLayers = useCallback(() => {
-    setLayers(INITIAL_LAYERS);
-    setOpacities({});
-    setShowCooling(false);
-    setRouteData(null);
+  const toggleTheme = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
   }, []);
 
-  // --- lazy heavy data: cooling ------------------------------------------------ #
-  const toggleCooling = (on) => {
-    setShowCooling(on);
-    if (on && !coolingGeoJson) fetchCoolingPotentialGeoJson().then(setCoolingGeoJson).catch(() => {});
-  };
-
-  // --- scenario overlay (shared with the Decision dock) -------------------- #
-  const handleScenarioData = (data) => setScenarioOverlay(data);
-  const handleScenarioModeChange = (modeChange) => {
-    setScenarioOverlay((prev) => (prev ? { ...prev, mode: modeChange } : prev));
-  };
-
-  // --- search / navigation -------------------------------------------------- #
-  const handleSearchSelect = (place) => {
-    setFlyTo({ lat: place.lat, lng: place.lng, zoom: place.boundingBox ? 15 : 16 });
-    setSelectedLocation({ name: place.shortName || place.name, lat: place.lat, lng: place.lng });
-  };
-
-  const handleSelectLocation = useCallback((loc) => {
-    setSelectedLocation(loc);
-  }, []);
-
-  const handleFlyTo = useCallback((lat, lng, zoom = 14) => {
-    setFlyTo({ lat, lng, zoom });
-  }, []);
-
-  const domainChipActive = (chip) => Boolean(layers[chip.group]?.[chip.layerKey]);
-
-  const toggleDomainChip = (chip) => {
-    setLayer(chip.group, chip.layerKey, !domainChipActive(chip));
-  };
-
-  // --- map props ------------------------------------------------------------- #
-  const mapProps = {
-    layers,
-    opacities,
+  // Shared props for all pages
+  const sharedProps = {
+    liveWeather,
+    airQuality,
+    prediction,
+    snapshotId,
+    freshness,
+    connectionState,
+    modelInfo,
+    aiStatus,
+    monitoring,
+    environmentSummary,
+    currentPrediction,
+    alertSummary,
+    liteMode,
+    toggleLiteMode,
+    health,
+    healthLoading,
     availability,
     overlayMeta,
-    scenarioOverlay,
-    currentPrediction,
-    historicalLayerData,
-    historicalDate,
-    onScenarioModeChange: handleScenarioModeChange,
-    onSelectLocation: handleSelectLocation,
-    routeData,
-    flyTo,
-    selectedPoint: selectedLocation ? { lat: selectedLocation.lat, lng: selectedLocation.lng } : null,
+    systemStatus,
     theme,
-    liveWeather
+    toggleTheme,
   };
 
-  const leftPanelTitle = {
-    city: 'City',
-    environment: 'Environment',
-    decision: 'Decision'
-  }[mode];
-
   return (
-    <div className="app-shell app-shell-3d">
-
-      {/* ================= HEADER ================= */}
-      <Header
-        theme={theme}
-        setTheme={setTheme}
-        liveWeatherData={liveWeather}
-        onOpenSystemStatus={() => setShowSystemStatus(true)}
-        onOpenHelp={() => setShowHelp(true)}
-        monitoring={monitoring}
-        modelInfo={modelInfo}
-        aiStatus={aiStatus}
-      />
-
-      {/* ================= SEARCH + DOMAIN CHIPS ================= */}
-      <div className="search-strip">
-        <div className="search-strip-inner">
-          <CitySearch onSelect={handleSearchSelect} />
-          <div className="domain-chips" role="toolbar" aria-label="Domain overlays">
-            {DOMAIN_CHIPS.map((chip) => (
-              <button
-                key={chip.key}
-                className={`domain-chip ${domainChipActive(chip) ? 'active' : ''}`}
-                onClick={() => toggleDomainChip(chip)}
-                style={domainChipActive(chip) ? { borderColor: chip.color, color: chip.color } : undefined}
-                title={`Toggle ${chip.label} overlay`}
-              >
-                <chip.icon size={13} />
-                {chip.label}
-              </button>
-            ))}
-            <button
-              className={`domain-chip ${showCooling ? 'active' : ''}`}
-              onClick={() => toggleCooling(!showCooling)}
-              style={showCooling ? { borderColor: '#16a34a', color: '#16a34a' } : undefined}
-              title="Cooling potential — model-derived intervention map"
-            >
-              <Sprout size={13} /> Cooling
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= MODE NAV ================= */}
-      <div className="view-tabs mode-nav">
-        <div className="view-tabs-inner" role="tablist" aria-label="Workspace modes">
-          {MODES.map((tab) => (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={mode === tab.key}
-              className={`view-tab ${mode === tab.key ? 'active' : ''}`}
-              onClick={() => setMode(tab.key)}
-              title={tab.title}
-            >
-              <tab.icon size={14} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ================= WORKSPACE ================= */}
-      <div className="dashboard dashboard-3d">
-        {/* LEFT — mode content (map stays the product in the centre) */}
-        <aside className="side-panel left-panel">
-          <div className="side-panel-header">
-            {mode === 'city' && <Activity size={14} color="var(--primary-sky)" />}
-            {mode === 'environment' && <Mountain size={14} color="var(--primary-sky)" />}
-            {mode === 'decision' && <Sprout size={14} color="#16a34a" />}
-            {mode === 'insights' && <Flame size={14} color="#dc2626" />}
-            <strong>{leftPanelTitle}</strong>
-          </div>
-          <div className="side-panel-body" style={{ padding: 0, gap: 0 }}>
-            {mode === 'city' && (
-              <EnvironmentPanel
-                key="city"
-                monitoring={monitoring}
-                liveWeather={liveWeather}
-                airQuality={airQuality}
-                modelInfo={modelInfo}
-                health={health}
-              />
-            )}
-            {mode === 'environment' && (
-              <EnvironmentPanel
-                key="environment"
-                monitoring={monitoring}
-                liveWeather={liveWeather}
-                airQuality={airQuality}
-                health={health}
-              />
-            )}
-            {mode === 'decision' && (
-              <div className="decision-panel">
-                <div className="decision-panel-head">
-                  <Layers size={14} color="var(--primary-sky)" />
-                  <strong>Decision Centre</strong>
-                  <span className="decision-panel-sub">Select a location on the map</span>
-                </div>
-                <div className="decision-panel-body">
-                  {selectedLocation && (
-                    <div className="decision-panel-content">
-                      <LocationIntelligencePanel
-                        location={selectedLocation}
-                        liveWeather={liveWeather}
-                        onClose={() => setSelectedLocation(null)}
-                      />
-                    </div>
-                  )}
-                  {!selectedLocation && (
-                    <div className="decision-panel-welcome">
-                      <strong>Select a location</strong> on the map or search for a place to begin.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {/* CENTER — the 3D map is ALWAYS the product */}
-        <main className="center-panel">
-          <div className="map-stage">
-            <DigitalTwinMap3D {...mapProps} />
-
-            {/* Floating toggles */}
-            <div className="map-overlay-stack">
-              <div className="map-overlay-tabs">
-                <button
-                  className={`overlay-tab ${showAi ? 'active' : ''}`}
-                  onClick={() => setShowAi((v) => !v)}
-                  title="Nemotron AI assistant (uses real backend data)"
-                >
-                  <Bot size={13} /> Ask AI
-                </button>
-                <button
-                  className={`overlay-tab ${showTimeMachine ? 'active' : ''}`}
-                  onClick={() => setShowTimeMachine((v) => !v)}
-                  title="Time machine — historical Landsat LST"
-                >
-                  <Clock size={13} /> Time
-                </button>
-                <button
-                  className="overlay-tab"
-                  onClick={() => setShowMonitoringDrawer(true)}
-                  title="Dataset availability + live weather"
-                >
-                  <Activity size={13} /> Data
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {showAi && (
-                  <motion.div key="ov-ai" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                    <AIAssistant
-                      modelInfo={modelInfo}
-                      aiStatus={aiStatus}
-                      selectedLocation={selectedLocation}
-                      areaOsm={selectedLocation?.stats}
-                      environmentSummary={environmentSummary}
-                      liveWeather={liveWeather}
-                      onStatusChange={setAiStatus}
-                    />
-                  </motion.div>
-                )}
-                {showTimeMachine && (
-                  <motion.div key="ov-tm" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                    <TimeMachine
-                      liveWeather={liveWeather}
-                      onDateSelect={(date) => {
-                        setHistoricalDate(date);
-                        // Fetch the grid data for the selected date
-                        import('./services/temporalClient').then(({ fetchTemporalGrid }) => {
-                          fetchTemporalGrid(date)
-                            .then((gridData) => {
-                              setHistoricalLayerData(gridData);
-                            })
-                            .catch(() => setHistoricalLayerData(null));
-                        });
-                      }}
-                      onClose={() => {
-                        setShowTimeMachine(false);
-                        setHistoricalDate(null);
-                        setHistoricalLayerData(null);
-                      }}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Mode docks — slide over the right edge of the map, map stays visible */}
-            {mode === 'decision' && (
-              <div className="mode-dock">
-                <div className="mode-dock-head">
-                  <Layers size={14} color="var(--primary-sky)" />
-                  <strong>Scenario Simulator</strong>
-                  <span className="mode-dock-sub">CURRENT → SCENARIO → DIFFERENCE (XGBoost)</span>
-                  <button className="mode-dock-close" onClick={() => setMode('city')} aria-label="Close scenario simulator">
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="mode-dock-body">
-                  <BeforeAfterComparison
-                    modelInfo={modelInfo}
-                    onModelInfoChange={setModelInfo}
-                    scenarioMode={scenarioOverlay?.mode}
-                    onScenarioModeChange={handleScenarioModeChange}
-                    onScenarioData={handleScenarioData}
-                  />
-                </div>
-              </div>
-            )}
-            {mode === 'insights' && (
-              <div className="mode-dock">
-                <div className="mode-dock-head">
-                  <BarChart3 size={14} color="#9333ea" />
-                  <strong>Insights &amp; Analytics</strong>
-                  <span className="mode-dock-sub">Real distributions · model residuals</span>
-                  <button className="mode-dock-close" onClick={() => setMode('city')} aria-label="Close insights">
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="mode-dock-body">
-                  <AnalyticsCharts
-                    liveWeather={liveWeather}
-                    availability={availability}
-                    environmentSummary={environmentSummary}
-                    modelInfo={modelInfo}
-                    onFlyTo={handleFlyTo}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Selected location / environmental intelligence */}
-            {selectedLocation && (
-              <div className="loc-panel-wrap">
-                <LocationIntelligencePanel
-                  location={selectedLocation}
-                  liveWeather={liveWeather}
-                  onClose={() => setSelectedLocation(null)}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Mobile floating buttons */}
-          <button className="map-float-btn" style={{ left: 12, top: 12 }} onClick={() => setDrawer('layers')}>
-            <Layers size={14} /> Layers
-          </button>
-        </main>
-
-        {/* RIGHT — layers */}
-        <aside className="side-panel right-panel">
-          <div className="side-panel-header">
-            <Layers size={14} color="var(--primary-sky)" />
-            <strong>Layers</strong>
-          </div>
-          <div className="side-panel-body" style={{ padding: '10px', gap: 0 }}>
-            <LayerManager
-              layers={layers}
-              setLayer={setLayer}
-              opacities={opacities}
-              setOpacity={setOpacity}
-              availability={availability}
-              overlayMeta={overlayMeta}
-              liveWeather={liveWeather}
-              onResetAll={resetAllLayers}
-            />
-          </div>
-        </aside>
-      </div>
-
-      {/* ================= SYSTEM STATUS BAR ================= */}
-      <SystemStatusBar
-        status={systemStatus}
-        loading={healthLoading}
-        onRefresh={handleRefresh}
-        onOpenPanel={() => setShowSystemStatus(true)}
-        connectionState={connectionState}
-        freshness={freshness}
-      />
-
-      {/* ================= DRAWERS (tablet/mobile) ================= */}
-      {(drawer || showMonitoringDrawer) && (
-        <div className="drawer-backdrop open" onClick={() => { setDrawer(null); setShowMonitoringDrawer(false); }} />
-      )}
-      {drawer === 'layers' && (
-        <div className="drawer">
-          <div className="drawer-head">
-            <Layers size={15} color="var(--primary-sky)" />
-            <strong>Layers</strong>
-            <button className="drawer-close" onClick={() => setDrawer(null)} aria-label="Close layers"><X size={15} /></button>
-          </div>
-          <div className="drawer-body" style={{ padding: '10px' }}>
-            <LayerManager
-              layers={layers}
-              setLayer={setLayer}
-              opacities={opacities}
-              setOpacity={setOpacity}
-              availability={availability}
-              overlayMeta={overlayMeta}
-              liveWeather={liveWeather}
-              onResetAll={resetAllLayers}
-            />
-          </div>
-        </div>
-      )}
-      {showMonitoringDrawer && (
-        <div className="drawer">
-          <div className="drawer-head">
-            <Activity size={15} color="var(--primary-sky)" />
-            <strong>Monitoring & Data Status</strong>
-            <button className="drawer-close" onClick={() => setShowMonitoringDrawer(false)} aria-label="Close monitoring"><X size={15} /></button>
-          </div>
-          <div className="drawer-body">
-            <MonitoringPanel
-              monitoring={monitoring}
-              liveWeather={liveWeather}
-              loading={!monitoring}
-              onRefresh={handleRefresh}
-              modelInfo={modelInfo}
-              aiStatus={aiStatus}
-            />
-          </div>
-        </div>
-      )}
-      {(drawer || showMonitoringDrawer) && (
-        <div className="drawer-backdrop open" onClick={() => { setDrawer(null); setShowMonitoringDrawer(false); }} />
-      )}
-      {drawer === 'layers' && (
-        <div className="drawer">
-          <div className="drawer-head">
-            <Activity size={15} color="var(--primary-sky)" />
-            <strong>Monitoring &amp; Data Status</strong>
-            <button className="drawer-close" onClick={() => setShowMonitoringDrawer(false)} aria-label="Close monitoring"><X size={15} /></button>
-          </div>
-          <div className="drawer-body">
-            <MonitoringPanel
-              monitoring={monitoring}
-              liveWeather={liveWeather}
-              loading={!monitoring}
-              onRefresh={handleRefresh}
-              modelInfo={modelInfo}
-              aiStatus={aiStatus}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ================= MODALS ================= */}
-      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-      {showSystemStatus && (
-        <SystemStatusPanel
-          onClose={() => setShowSystemStatus(false)}
-          status={systemStatus}
-          loading={healthLoading}
-          onRefresh={handleRefresh}
+    <div className="hs-app-shell">
+      {/* Desktop rail / Mobile bottom bar */}
+      {isMobile ? (
+        <MobileNavigation />
+      ) : (
+        <NavigationRail
+          collapsed={navCollapsed}
+          onToggleCollapse={() => setNavCollapsed(c => !c)}
+          theme={theme}
         />
       )}
+
+      <main className="hs-main-content">
+        {/* Top bar */}
+        <header className="hs-top-bar">
+          <div className="hs-top-bar-left">
+            <img
+              src={theme === 'dark' ? '/logo-dark.jpeg' : '/logo-light.jpeg'}
+              alt="Logo"
+              className="hs-top-bar-logo"
+            />
+          </div>
+          <div className="hs-top-bar-right">
+            {/* Live Heat Alert Pill */}
+            {alertSummary && (
+              <button
+                className="hs-top-alert-pill"
+                onClick={() => navigate('/alerts')}
+                style={{
+                  backgroundColor: alertSummary.tier_bg_color || 'rgba(230, 126, 34, 0.15)',
+                  borderColor: alertSummary.tier_color || '#E67E22',
+                  color: alertSummary.tier_color || '#E67E22',
+                }}
+                title="Civil Protection Early Warning: Click to view Alert Centre"
+              >
+                <span className="hs-alert-pulse-dot" style={{ backgroundColor: alertSummary.tier_color || '#E67E22' }} />
+                <span className="hs-alert-text">
+                  {alertSummary.compound_hazard ? '⚠ COMPOUND HAZARD' : `${alertSummary.tier} ALERT`}
+                </span>
+                <span className="hs-alert-wbgt">WBGT {alertSummary.wbgt_c}°C</span>
+              </button>
+            )}
+
+            {/* Lite Mode Toggle for Low RAM Safety */}
+            <button
+              className={`hs-lite-toggle ${liteMode ? 'active' : ''}`}
+              onClick={toggleLiteMode}
+              title={liteMode ? 'Lite Mode Active (Fast 2D Leaflet, Low RAM)' : '3D High-Fidelity Mode (Heavy WebGL)'}
+            >
+              <span className="hs-lite-icon">⚡</span>
+              <span className="hs-lite-text">{liteMode ? 'Lite Mode' : '3D Mode'}</span>
+            </button>
+
+            <TopSystemStatus
+              health={health}
+              liveWeather={liveWeather}
+              airQuality={airQuality}
+              connectionState={connectionState}
+            />
+            <button className="hs-theme-toggle" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle dark / light theme">
+              {theme === 'dark' ? '☀' : '☾'}
+            </button>
+          </div>
+        </header>
+
+        {/* Routed page content */}
+        <div className="hs-page-container">
+          <AnimatedRoutes sharedProps={sharedProps} />
+        </div>
+      </main>
     </div>
   );
 }
 
-// Outer wrapper that provides the LiveDataContext
+/* --------------------------------------------------------------------------
+   Root export — wraps everything in BrowserRouter + LiveDataProvider
+   -------------------------------------------------------------------------- */
 export function App() {
   return (
-    <LiveDataProvider>
-      <AppInner />
-    </LiveDataProvider>
+    <BrowserRouter>
+      <LiveDataProvider>
+        <AppInner />
+      </LiveDataProvider>
+    </BrowserRouter>
   );
 }
 

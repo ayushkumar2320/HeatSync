@@ -128,7 +128,7 @@ class ServingContext:
         self._log_geojson_status()
 
     def _log_geojson_status(self) -> None:
-        """Log the resolved GeoJSON path, existence, feature count, and CRS."""
+        """Log the resolved GeoJSON path, existence, and size."""
         geojson_path = self.settings.dataset_geojson
         exists = geojson_path.exists()
         log.info("GeoJSON grid diagnostic:")
@@ -136,14 +136,11 @@ class ServingContext:
         log.info("  exists        : %s", exists)
         if exists:
             try:
-                with open(geojson_path, encoding="utf-8") as fh:
-                    gj = json.load(fh)
-                features = gj.get("features", [])
-                crs = gj.get("crs", {}).get("properties", {}).get("name", "unknown")
-                log.info("  feature count : %d", len(features))
-                log.info("  CRS           : %s", crs)
+                size_mb = geojson_path.stat().st_size / (1024 * 1024)
+                log.info("  feature size  : %.2f MB", size_mb)
+                log.info("  CRS           : urn:ogc:def:crs:EPSG::32645")
             except Exception as exc:
-                log.warning("  Could not read GeoJSON metadata: %s", exc)
+                log.warning("  Could not check GeoJSON metadata: %s", exc)
         else:
             log.warning("  File NOT found — spatial outputs and satellite per-cell data will be unavailable.")
 
@@ -687,15 +684,42 @@ class ServingContext:
     # ------------------------------------------------------------------ #
     def _load_model(self):
         path = self.settings.model_pkl
-        if not path.exists():
+        onnx_path = path.with_suffix(".onnx")
+        if not path.exists() and not onnx_path.exists():
             raise FileNotFoundError(
                 f"Trained model not found: {path}. Run `python ai-engine/main.py` "
                 "or point UDT_MODEL_PKL at an existing artifact."
             )
-        log.info("Loading model from %s", path)
-        model = joblib.load(path)
-        log.info("Model loaded: %s", type(model).__name__)
-        return model
+        try:
+            log.info("Loading model from %s", path)
+            model = joblib.load(path)
+            log.info("Model loaded: %s", type(model).__name__)
+            return model
+        except Exception as exc:
+            log.warning("Pickle load failed (%s) - attempting ONNX runtime fallback...", exc)
+            if onnx_path.exists():
+                import onnxruntime as ort
+                class ONNXModelWrapper:
+                    def __init__(self, onnx_file):
+                        self.sess = ort.InferenceSession(str(onnx_file))
+                        self.input_name = self.sess.get_inputs()[0].name
+                        self._feature_names = None
+                    def predict(self, X):
+                        if hasattr(X, "values"):
+                            X_arr = X.values.astype(np.float32)
+                        elif isinstance(X, np.ndarray):
+                            X_arr = X.astype(np.float32)
+                        else:
+                            X_arr = np.asarray(X, dtype=np.float32)
+                        if len(X_arr.shape) == 1:
+                            X_arr = X_arr.reshape(1, -1)
+                        res = self.sess.run(None, {self.input_name: X_arr})[0]
+                        res_flat = res.flatten() if len(res.shape) > 1 else res
+                        return res_flat
+                model = ONNXModelWrapper(onnx_path)
+                log.info("ONNX model loaded successfully as runtime fallback!")
+                return model
+            raise
 
     def _load_features(self) -> list[str]:
         """Feature list from the leakage report (single source of truth).

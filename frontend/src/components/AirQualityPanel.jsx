@@ -2,15 +2,6 @@ import React from 'react';
 import { Wind, AlertTriangle, X, Clock } from 'lucide-react';
 import { useLiveData } from '../context/LiveDataContext';
 
-const fmtTime = (iso) => {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '—';
-  }
-};
-
 const fmt = (v, d = 1) => (v === null || v === undefined || Number.isNaN(v) ? null : Number(v).toFixed(d));
 
 /**
@@ -18,7 +9,7 @@ const fmt = (v, d = 1) => (v === null || v === undefined || Number.isNaN(v) ? nu
  * Never makes independent API calls. Always shows honest freshness status.
  */
 export const AirQualityPanel = ({ onClose = null, initial = null }) => {
-  const { airQuality: ctxAirQuality, aqiAge, getFreshnessStatus, formatAge, sourceStatus } = useLiveData();
+  const { airQuality: ctxAirQuality, aqiAge, getFreshnessStatus, formatAge } = useLiveData();
 
   // Use context data, falling back to prop if provided
   const aqData = ctxAirQuality || initial;

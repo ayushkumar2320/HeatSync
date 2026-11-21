@@ -22,10 +22,9 @@ import logging
 import time
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from backend.api.deps import get_serving
 from backend.config.settings import Settings, get_settings
 from backend.services.live_data_manager.snapshot import get_current_snapshot
 
@@ -37,8 +36,14 @@ router = APIRouter(prefix="/api/live", tags=["live-data"])
 SSE_REFRESH_INTERVAL = 60  # 1 minute
 
 
+def get_serving_from_app(request: Request):
+    """Extract the app-scoped ServingContext without creating a new one."""
+    return request.app.state.serving
+
+
 @router.get("/snapshot")
 def live_snapshot(
+    request: Request,
     force: bool = False,
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
@@ -65,11 +70,10 @@ def live_snapshot(
             },
         )
 
-    # Get prediction from the serving context
+    # Get prediction from the serving context (use app-scoped instance)
     prediction_data = None
     try:
-        from backend.services.serving import ServingContext
-        serving = ServingContext(settings)
+        serving = get_serving_from_app(request)
         if serving.model_available:
             from backend.services.live_feature_pipeline import refresh_feature_pipeline
             grid = refresh_feature_pipeline(settings)
@@ -191,7 +195,11 @@ def live_status(
     for source_key in ("weather", "air_quality", "satellite", "gis", "terrain"):
         freshness = snapshot.freshness.get(source_key, {})
         status_val = snapshot.source_status.get(source_key, "UNAVAILABLE")
-        observed = freshness.get("observed_at") or freshness.get("acquired") or freshness.get("last_updated")
+        observed = (
+            freshness.get("observed_at")
+            or freshness.get("acquired")
+            or freshness.get("last_updated")
+        )
 
         age_seconds = None
         if observed:
@@ -227,6 +235,7 @@ def live_status(
 
 @router.get("/snapshot/debug")
 def snapshot_debug(
+    request: Request,
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
     """Snapshot debugging endpoint.
@@ -244,8 +253,7 @@ def snapshot_debug(
     feature_schema = None
     prediction_timestamp = None
     try:
-        from backend.services.serving import ServingContext
-        serving = ServingContext(settings)
+        serving = get_serving_from_app(request)
         if serving.model_available:
             model_version = serving.model_version
             feature_schema = len(serving.features)

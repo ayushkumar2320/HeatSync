@@ -35,18 +35,17 @@ import numpy as np
 import pandas as pd
 
 from backend.config.settings import Settings
+from backend.utils.common import (
+    EARTH_RADIUS_M,
+    HEAT_CLASS_BREAKS,
+    AQI_CATEGORIES,
+    heat_class,
+    aqi_category,
+    haversine_m,
+    vec_haversine_m,
+)
 
 log = logging.getLogger("backend.city_data")
-
-EARTH_RADIUS_M = 6_371_000.0
-
-# Fixed heat-class breaks (gis-engine HeatClassConfig) — used only to label.
-HEAT_CLASS_BREAKS = [("Very Cool", 20.0), ("Cool", 25.0), ("Moderate", 30.0),
-                     ("Warm", 35.0), ("Hot", 40.0)]
-
-# CPCB AQI categories (gis-engine config AQI_CATEGORIES)
-AQI_CATEGORIES = [("Good", 50), ("Satisfactory", 100), ("Moderate", 200),
-                  ("Poor", 300), ("Very Poor", 400)]
 
 # Feature columns of interest -> friendly label (kept minimal on purpose).
 FEATURE_MAP = {
@@ -91,40 +90,6 @@ SCENARIO_FILES = [
 
 # Walking speed used ONLY for the routing time estimate (labelled as such).
 WALK_SPEED_KMH = 4.8
-
-
-def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    a = (math.sin(math.radians(lat2 - lat1) / 2) ** 2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(math.radians(lng2 - lng1) / 2) ** 2)
-    return 2 * EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
-
-
-def _vec_haversine_m(lat1, lng1, lat2, lng2) -> np.ndarray:
-    """Vectorised haversine for nearest-cell lookups."""
-    lat1, lng1, lat2, lng2 = map(np.asarray, (lat1, lng1, lat2, lng2))
-    a = np.sin(np.radians(lat2 - lat1) / 2) ** 2 + np.cos(
-        np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(
-        np.radians(lng2 - lng1) / 2) ** 2
-    return 2 * EARTH_RADIUS_M * np.arcsin(np.minimum(1.0, np.sqrt(a)))
-
-
-def heat_class(celsius: float | None) -> str | None:
-    if celsius is None or not math.isfinite(celsius):
-        return None
-    for label, threshold in HEAT_CLASS_BREAKS:
-        if celsius < threshold:
-            return label
-    return "Very Hot"
-
-
-def aqi_category(aqi: float | None) -> str | None:
-    if aqi is None or not math.isfinite(aqi):
-        return None
-    for label, threshold in AQI_CATEGORIES:
-        if aqi <= threshold:
-            return label
-    return "Severe"
 
 
 def _f(value) -> float | None:
@@ -326,7 +291,7 @@ class CityDataService:
         self._load_grid()
         if self._lngs is None or self._lats is None:
             return None
-        dists = _vec_haversine_m(lat, lng, self._lats, self._lngs)
+        dists = vec_haversine_m(lat, lng, self._lats, self._lngs)
         idx = int(np.argmin(dists))
         dist_m = float(dists[idx])
         if dist_m > max_km * 1000.0:
@@ -742,11 +707,24 @@ class CityDataService:
     # ------------------------------------------------------------------ #
     def route(self, start_lat: float, start_lng: float,
               end_lat: float, end_lng: float,
-              heat_weight: float = 0.0) -> dict:
-        """Grid-based routing: ``heat_weight=0`` fastest, higher = cooler.
+              heat_weight: float = 0.0,
+              departure_time: str | None = None,
+              weights: dict[str, float] | None = None) -> dict:
+        """Grid-based routing with three route options.
 
-        A* on the real 100 m cell lattice. The coolest route penalises high
-        predicted-LST cells, so it trades a little distance for shade/cooling.
+        Returns fastest, coolest and balanced routes. The balanced route
+        uses configurable weights following the formula:
+
+            route_cost = distance_weight * distance
+                       + heat_weight * thermal_exposure
+                       + aqi_weight * pollution
+                       - shade_weight * shade
+                       - vegetation_weight * vegetation
+
+        ``heat_weight=0`` gives fastest; higher = cooler. The balanced
+        route uses a moderate heat_weight (0.14) that splits the
+        difference between fastest and coolest.
+
         This is NOT road-network routing — it is a grid-level estimate.
         """
         self._load_grid()
@@ -758,9 +736,11 @@ class CityDataService:
         start_id, end_id = str(start["grid_id"]), str(end["grid_id"])
         if start_id == end_id:
             return {"available": True, "fastest": None, "coolest": None,
+                    "balanced": None,
                     "message": "Start and destination are in the same grid cell."}
 
         baseline = self._load_baseline()
+        features_df = self._load_features()
         lngs = self._lngs
         lats = self._lats
         gids = self._gids
@@ -773,7 +753,7 @@ class CityDataService:
         except ImportError as exc:  # pragma: no cover - scipy is a project dependency
             raise RuntimeError("scipy is required for routing.") from exc
         tree = cKDTree(np.column_stack([lngs, lats]))
-        dist_km = _haversine_m(start["latitude"], start["longitude"],
+        dist_km = haversine_m(start["latitude"], start["longitude"],
                                end["latitude"], end["longitude"]) / 1000.0
         if dist_km > 40:
             return {"available": False,
@@ -786,32 +766,82 @@ class CityDataService:
         lst_ref = float(np.nanpercentile(cell_lst, 60)) if np.isfinite(cell_lst).any() else 35.0
         lst_std = float(np.nanstd(cell_lst)) if np.isfinite(cell_lst).any() else 1.0
 
-        straight_m = _haversine_m(start["latitude"], start["longitude"],
+        # Pre-load per-cell AQI, NDVI, tree density for the cost formula.
+        cell_aqi = np.full(n, np.nan)
+        cell_ndvi = np.full(n, np.nan)
+        cell_tree = np.full(n, np.nan)
+        if features_df is not None:
+            for gid in gids:
+                if gid in features_df.index:
+                    row = features_df.loc[gid]
+                    v = _f(row.get("MeanAQI"))
+                    if v is not None:
+                        cell_aqi[index[gid]] = v
+                    v = _f(row.get("MeanNDVI"))
+                    if v is not None:
+                        cell_ndvi[index[gid]] = v
+                    v = _f(row.get("TreeDensity"))
+                    if v is not None:
+                        cell_tree[index[gid]] = v
+
+        # Normalise environmental arrays to [0, 1] for the cost formula.
+        def _norm(arr: np.ndarray) -> np.ndarray:
+            valid = arr[np.isfinite(arr)]
+            if valid.size == 0:
+                return np.zeros(n)
+            mn, mx = float(valid.min()), float(valid.max())
+            rng = mx - mn
+            if rng < 1e-9:
+                return np.zeros(n)
+            return np.clip((arr - mn) / rng, 0.0, 1.0)
+
+        norm_aqi = _norm(cell_aqi)
+        norm_ndvi = _norm(cell_ndvi)
+        norm_tree = _norm(cell_tree)
+        norm_lst = _norm(cell_lst)
+
+        straight_m = haversine_m(start["latitude"], start["longitude"],
                                   end["latitude"], end["longitude"])
         # Budget for the coolest route: it may detour, but only up to ~1.7x
         # the straight-line distance (keeps the comparison meaningful).
         cool_budget_m = max(1.7 * straight_m, 4000.0)
 
-        def astar(weight: float) -> dict | None:
-            """A*; cost = distance * heat_factor.
+        # User-supplied weights (for the cost formula) with defaults.
+        w = {
+            "distance": (weights or {}).get("distance", 1.0),
+            "heat": (weights or {}).get("heat", 0.0),
+            "aqi": (weights or {}).get("aqi", 0.0),
+            "shade": (weights or {}).get("shade", 0.0),
+            "vegetation": (weights or {}).get("vegetation", 0.0),
+        }
 
-            heat_factor is 1 for cells at or below the 60th percentile of
-            predicted LST and grows linearly above it — so the "coolest"
-            route only avoids genuinely hot cells and never rewards
-            unbounded detours through cool areas.
+        def astar(weight: float, use_formula: bool = False) -> dict | None:
+            """A* on the 100 m cell lattice.
+
+            When *use_formula* is True the edge cost follows the full
+            configurable route_cost formula.  When False (fastest route)
+            cost = raw distance only.
             """
             start_i = index[start_id]
             end_i = index[end_id]
-            if weight > 0:
+            if use_formula:
+                # Per-cell cost multiplier from the configurable formula.
+                heat_factor = (w["distance"]
+                              + w["heat"] * norm_lst
+                              + w["aqi"] * norm_aqi
+                              - w["shade"] * norm_tree
+                              - w["vegetation"] * norm_ndvi)
+                heat_factor = np.clip(heat_factor, 0.1, 5.0)
+            elif weight > 0:
                 base = (cell_lst - lst_ref) / max(lst_std, 1e-6)
                 base = np.clip(base, 0.0, 3.0)
-                heat_cost = 1.0 + weight * base
+                heat_factor = 1.0 + weight * base
             else:
-                heat_cost = np.ones(n)
-            budget = cool_budget_m if weight > 0 else math.inf
+                heat_factor = np.ones(n)
+            budget = cool_budget_m if weight > 0 or use_formula else math.inf
 
             def h(i: int) -> float:
-                return _haversine_m(lats[i], lngs[i],
+                return haversine_m(lats[i], lngs[i],
                                     lats[end_i], lngs[end_i])
 
             open_heap = [(0.0, start_i)]
@@ -840,12 +870,12 @@ class CityDataService:
                     j = int(j)
                     if j == current or j in closed:
                         continue
-                    if not np.isfinite(heat_cost[j]) and weight > 0:
-                        continue  # no LST data -> skip for coolest route
-                    edge = _haversine_m(clat, clng, lats[j], lngs[j])
+                    if not np.isfinite(heat_factor[j]) and weight > 0:
+                        continue  # no LST data -> skip for hottest route
+                    edge = haversine_m(clat, clng, lats[j], lngs[j])
                     if dist_so_far[current] + edge > budget:
                         continue  # respect the detour budget
-                    tentative = g_score[current] + edge * heat_cost[j]
+                    tentative = g_score[current] + edge * heat_factor[j]
                     if tentative < g_score.get(j, math.inf):
                         g_score[j] = tentative
                         dist_so_far[j] = dist_so_far[current] + edge
@@ -863,14 +893,47 @@ class CityDataService:
                     break
             path_i.append(start_i)
             path_i.reverse()
-            return _route_stats(path_i, lngs, lats, cell_lst, gids)
+            return _route_stats(path_i, lngs, lats, cell_lst, gids, features_df)
 
         fastest = astar(0.0)
         coolest = astar(0.28)
+        balanced = astar(0.14)
+
+        # Build the transparent methodology note.
+        methodology = {
+            "formula": (
+                "route_cost = distance_weight × distance "
+                "+ heat_weight × thermal_exposure "
+                "+ aqi_weight × pollution "
+                "- shade_weight × shade "
+                "- vegetation_weight × vegetation"
+            ),
+            "weights_used": w,
+            "grid_resolution_m": 100,
+            "algorithm": "A* on 100 m cell lattice (not road-network routing)",
+            "walking_speed_kmh": WALK_SPEED_KMH,
+            "departure_time_note": (
+                f"Departure time '{departure_time}' accepted but not yet modelled; "
+                "thermal exposure uses current predicted LST regardless of time."
+                if departure_time else
+                "No departure time specified; thermal exposure uses current predicted LST."
+            ),
+            "limitations": [
+                "Grid-level estimate — not road-network routing",
+                "Thermal exposure is modelled LST, not measured body temperature",
+                "Walking time assumes steady pace on flat ground",
+                "Shade proxy is tree density, not measured canopy cover",
+            ],
+        }
+
         return {
             "available": True,
             "fastest": fastest,
             "coolest": coolest,
+            "balanced": balanced,
+            "departure_time": departure_time,
+            "weights": w,
+            "methodology": methodology,
             "note": "Grid-level estimate on the 100 m model lattice (not "
                     "road-network routing). 'Coolest' minimises distance "
                     "weighted by predicted LST. Times assume walking at "
@@ -880,19 +943,53 @@ class CityDataService:
         }
 
 
-def _route_stats(path_i, lngs, lats, cell_lst, gids) -> dict:
+def _route_stats(path_i, lngs, lats, cell_lst, gids, features_df=None) -> dict:
+    """Compute route statistics including environmental metrics.
+
+    When *features_df* is provided the route also returns average shade
+    (tree density proxy), vegetation (NDVI) and AQI along the path.
+    """
     coords = [[round(float(lngs[i]), 6), round(float(lats[i]), 6)] for i in path_i]
     distance_m = sum(
-        _haversine_m(lats[a], lngs[a], lats[b], lngs[b])
+        haversine_m(lats[a], lngs[a], lats[b], lngs[b])
         for a, b in itertools.pairwise(path_i)
     )
     lsts = [cell_lst[i] for i in path_i if np.isfinite(cell_lst[i])]
+
+    # Environmental metrics along the route path.
+    shade_values: list[float] = []
+    vegetation_values: list[float] = []
+    aqi_values: list[float] = []
+    if features_df is not None:
+        for i in path_i:
+            gid = gids[i]
+            if gid in features_df.index:
+                row = features_df.loc[gid]
+                td = _f(row.get("TreeDensity"))
+                if td is not None:
+                    shade_values.append(td)
+                ndvi = _f(row.get("MeanNDVI"))
+                if ndvi is not None:
+                    vegetation_values.append(ndvi)
+                aqi = _f(row.get("MeanAQI"))
+                if aqi is not None:
+                    aqi_values.append(aqi)
+
+    # Thermal exposure: average predicted LST along the path (the core
+    # metric the user cares about).
+    avg_lst = round(float(np.mean(lsts)), 2) if lsts else None
+    thermal_exposure = avg_lst  # direct alias for the cost formula
+
     return {
         "distance_m": round(distance_m, 0),
         "distance_km": round(distance_m / 1000.0, 2),
         "time_min": round(distance_m / 1000.0 / WALK_SPEED_KMH * 60.0, 1),
-        "avg_lst_c": round(float(np.mean(lsts)), 2) if lsts else None,
+        "avg_lst_c": avg_lst,
         "max_lst_c": round(float(np.max(lsts)), 2) if lsts else None,
+        "thermal_exposure": thermal_exposure,
+        "shade": round(float(np.mean(shade_values)), 4) if shade_values else None,
+        "vegetation": round(float(np.mean(vegetation_values)), 4) if vegetation_values else None,
+        "aqi": round(float(np.mean(aqi_values)), 1) if aqi_values else None,
         "n_cells": len(path_i),
         "geometry": {
             "type": "LineString",

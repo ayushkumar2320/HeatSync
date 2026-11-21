@@ -23,10 +23,9 @@ from fastapi.responses import JSONResponse
 from backend.api.deps import get_catalog
 from backend.config.settings import Settings, get_settings
 from backend.services.catalog import DataCatalog
+from backend.utils.common import EARTH_RADIUS_M, haversine_m
 
 router = APIRouter(prefix="/api/environment", tags=["environment"])
-
-EARTH_RADIUS_M = 6_371_000.0
 # Bhubaneswar approximate centroid latitude (used for degree->metre scaling)
 REF_LAT = math.radians(20.26)
 M_PER_DEG_LAT = math.pi * EARTH_RADIUS_M / 180.0
@@ -62,15 +61,8 @@ def _ring_length(coords: list[list[float]]) -> float:
         return 0.0
     total = 0.0
     for (lng1, lat1), (lng2, lat2) in zip(coords, coords[1:] + coords[:1], strict=True):
-        total += _haversine(lat1, lng1, lat2, lng2)
+        total += haversine_m(lat1, lng1, lat2, lng2)
     return total
-
-
-def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    a = math.sin(math.radians(lat2 - lat1) / 2) ** 2 + math.cos(
-        math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(
-        math.radians(lng2 - lng1) / 2) ** 2
-    return 2 * EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
 
 
 def _polygon_area_m2(geometry: dict) -> float:

@@ -1,0 +1,183 @@
+/* ==========================================================================
+   MAP OVERLAY LAYOUT SYSTEM
+   =========================
+   Every floating element on the map uses these variables for positioning.
+   No element should use hardcoded pixel values for top/right/bottom/left.
+
+   ZONE MAP:
+   ┌──────────────────────────────────────────────────────────────┐
+   │ ┌──────────────┐                          ┌──────────────┐  │
+   │ │ TOP-LEFT     │                          │ TOP-RIGHT    │  │
+   │ │ Thermal/Info │                          │ Layers/Cam   │  │
+   │ └──────────────┘                          └──────────────┘  │
+   │                                                            │
+   │                                                            │
+   │                                                            │
+   │ ┌──────────────┐         ┌──────────┐    ┌──────────────┐  │
+   │ │ BOTTOM-LEFT  │         │BTM-CENTER│    │ BOTTOM-RIGHT │  │
+   │ │ Coords       │         │ Status   │    │ Zoom/Nav     │  │
+   │ └──────────────┘         └──────────┘    └──────────────┘  │
+   └──────────────────────────────────────────────────────────────┘
+   ========================================================================== */
+
+:root {
+  /* ---- Map overlay safe margins ---- */
+  --map-safe-top:    14px;
+  --map-safe-right:  14px;
+  --map-safe-bottom: 14px;
+  --map-safe-left:   14px;
+
+  /* ---- Overlay gap between panels ---- */
+  --map-overlay-gap: 12px;
+
+  /* ---- Panel dimensions ---- */
+  --map-panel-radius: 11px;
+  --map-panel-padding: 10px 13px;
+  --map-btn-radius: 9px;
+
+  /* ---- Z-index tiers ---- */
+  --z-map:           0;
+  --z-map-controls:  20;   /* MapLibre nav controls (zoom, compass) */
+  --z-float:         30;   /* Primary floating panels              */
+  --z-float-above:   35;   /* Scenario legend (above other panels) */
+  --z-expanded:      40;   /* Expanded drawers / overlays           */
+  --z-modal:         100;  /* Modal / dialog                       */
+  --z-command:       200;  /* AI overlay / command palette          */
+
+  /* ---- Top-left zone: top + left ---- */
+  --zone-top-left-top:    var(--map-safe-top);
+  --zone-top-left-left:   var(--map-safe-left);
+
+  /* ---- Top-right zone: top + right ---- */
+  --zone-top-right-top:   var(--map-safe-top);
+  --zone-top-right-right: var(--map-safe-right);
+
+  /* ---- Bottom-left zone: bottom + left ---- */
+  --zone-bot-left-bottom: var(--map-safe-bottom);
+  --zone-bot-left-left:   var(--map-safe-left);
+
+  /* ---- Bottom-right zone: bottom + right (reserved for MapLibre) ---- */
+  --zone-bot-right-bottom: var(--map-safe-bottom);
+  --zone-bot-right-right:  var(--map-safe-right);
+
+  /* ---- Bottom-center zone ---- */
+  --zone-bot-center-bottom: var(--map-safe-bottom);
+}
+
+/* ---- Base class for all map overlays ---- */
+.map-overlay {
+  position: absolute;
+  pointer-events: auto;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* ==========================================================================
+   ZONE: TOP-LEFT
+   Thermal intelligence / info panel / layer manager
+   ========================================================================== */
+.map-zone-top-left {
+  top: var(--zone-top-left-top);
+  left: var(--zone-top-left-left);
+  max-width: min(430px, calc(100% - 200px));
+}
+
+/* ==========================================================================
+   ZONE: TOP-RIGHT
+   Camera controls / layer toggles / quick-action buttons
+   ========================================================================== */
+.map-zone-top-right {
+  top: var(--zone-top-right-top);
+  right: var(--zone-top-right-right);
+}
+
+/* ==========================================================================
+   ZONE: BOTTOM-LEFT
+   Coordinates / location information
+   ========================================================================== */
+.map-zone-bot-left {
+  bottom: var(--zone-bot-left-bottom);
+  left: var(--zone-bot-left-left);
+}
+
+/* ==========================================================================
+   ZONE: BOTTOM-CENTER
+   Model status / weather / legend
+   ========================================================================== */
+.map-zone-bot-center {
+  bottom: var(--zone-bot-center-bottom);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* ==========================================================================
+   ZONE: BOTTOM-RIGHT
+   Reserved for MapLibre NavigationControl
+   DO NOT place custom floating panels here.
+   ========================================================================== */
+.map-zone-bot-right {
+  bottom: var(--zone-bot-right-bottom);
+  right: var(--zone-bot-right-right);
+}
+
+/* ==========================================================================
+   SCENARIO LEGEND
+   Sits below the top-right zone, anchored to the right edge.
+   ========================================================================== */
+.map-zone-scenario-legend {
+  top: calc(var(--zone-top-right-top) + 180px);
+  right: var(--zone-top-right-right);
+  width: 240px;
+}
+
+/* ==========================================================================
+   RESPONSIVE: TABLET (< 1024px)
+   Collapse secondary info, reduce panel widths.
+   ========================================================================== */
+@media (max-width: 1024px) {
+  :root {
+    --map-safe-top:    10px;
+    --map-safe-right:  10px;
+    --map-safe-bottom: 10px;
+    --map-safe-left:   10px;
+    --map-overlay-gap: 8px;
+  }
+
+  .map-zone-top-left {
+    max-width: min(320px, calc(100% - 160px));
+  }
+
+  .map-zone-scenario-legend {
+    width: 200px;
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE: MOBILE (< 768px)
+   Convert secondary panels to collapsible drawers.
+   Keep only essential controls visible.
+   ========================================================================== */
+@media (max-width: 768px) {
+  :root {
+    --map-safe-top:    8px;
+    --map-safe-right:  8px;
+    --map-safe-bottom: 8px;
+    --map-safe-left:   8px;
+    --map-overlay-gap: 6px;
+  }
+
+  .map-zone-top-left {
+    max-width: calc(100% - 120px);
+  }
+
+  .map-zone-top-right {
+    /* Only essential buttons stay visible */
+  }
+
+  .map-zone-scenario-legend {
+    top: auto;
+    bottom: calc(var(--zone-bot-right-bottom) + 50px);
+    right: var(--zone-bot-right-right);
+    width: 180px;
+  }
+}

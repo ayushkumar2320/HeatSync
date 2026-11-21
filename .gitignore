@@ -30,5 +30,7 @@ postgres_data/
 Thumbs.db
 
 data/predictions/Predicted_LST.geojson
-data/predictions/Predicted_LST.geojson
-data/predictions/Predicted_LST.geojson
+data/raw/
+data/processed/
+data/statistics/
+data/cache/

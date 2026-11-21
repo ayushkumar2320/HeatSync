@@ -7,9 +7,8 @@ imagery to an interactive web dashboard.
 ## Architecture
 
 ```
-                        ┌─────────────────────────┐
-                        │  Frontend (React + Vite)│
-                        │  Leaflet · Chart.js     │
+                        ┌─────────────────────────┐│  Frontend (React + Vite)│
+│  MapLibre GL · Chart.js │
                         └───────────┬─────────────┘
                                     │  HTTP / REST
                                     ▼
@@ -80,7 +79,7 @@ imagery to an interactive web dashboard.
 
 | Folder | Purpose | Entry point |
 |--------|---------|-------------|
-| `frontend/` | HeatSync React (Vite) dashboard — Leaflet map, Chart.js analytics, intervention simulator, priority matrix | `npm run dev` |
+| `frontend/` | HeatSync React (Vite) dashboard — MapLibre GL 3D map, Chart.js analytics, intervention simulator, priority matrix | `npm run dev` |
 | `backend/` | FastAPI service — predictions, data layers, simulations, explainability, dashboard payloads | `uvicorn backend.main:app` |
 | `ai-engine/` | UHI ML pipeline — training, CV, hyperparameter search, SHAP, ONNX export, prediction | `python main.py` |
 | `gis-engine/` | Unified GIS pipeline — per-dataset download + processing stages | `python main.py` |

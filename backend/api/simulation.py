@@ -259,7 +259,9 @@ def run_current_scenario(
     # Data freshness from the snapshot
     data_freshness = snapshot.freshness
 
-    # Build response with area and validation stats
+    # Build response with area and validation stats.
+    # The top-level fields match SimulationResult so the frontend
+    # ScenarioResult component can read them directly.
     response_data = {
         "success": True,
         "status": "success",
@@ -267,10 +269,17 @@ def run_current_scenario(
         "simulation_id": simulation_id,
         "snapshot_id": snapshot.snapshot_id,
         "generated_at": datetime.now(UTC).isoformat(),
-        "scenario": {
-            "name": payload.scenario,
-            "description": cells_result.get("scenario", payload.scenario),
-        },
+        # --- flat SimulationResult fields (consumed by ScenarioResult UI) ---
+        "scenario": payload.scenario,
+        "description": cells_result.get("scenario", payload.scenario),
+        "n_cells": cells_result.get("count", 0),
+        "baseline_lst": cells_result.get("baseline_lst"),
+        "mean_predicted_lst": cells_result.get("mean_predicted_lst"),
+        "mean_delta_lst": cells_result.get("mean_delta_lst"),
+        "min_delta": cells_result.get("min_delta"),
+        "max_delta": cells_result.get("max_delta"),
+        "pct_cells_cooler": cells_result.get("pct_cells_cooler"),
+        # --- nested detail blocks ---
         "baseline": {
             "mean_lst": cells_result.get("baseline_lst"),
             "min_lst": cells_result.get("baseline_lst"),
@@ -294,8 +303,6 @@ def run_current_scenario(
             "version": serving.model_version,
             "feature_count": len(serving.features),
         },
-        "snapshot_id": snapshot.snapshot_id,
-        "simulation_id": simulation_id,
     }
     
     # Add area stats if present

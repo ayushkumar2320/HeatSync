@@ -193,14 +193,17 @@ def _terrain_report(settings: Settings) -> dict:
     backend only reports availability when tiles exist locally.
     """
     import os
+    from pathlib import Path
     # Check multiple possible locations (local dev vs Docker)
     terrain_dirs = [
         settings.project_root / "frontend" / "public" / "terrain",
         settings.project_root / "terrain",
-        "/app/frontend/public/terrain",  # Docker (if ever added)
+        Path("/app/frontend/public/terrain"),  # Docker (if ever added)
     ]
     terrain_dir = None
     for td in terrain_dirs:
+        if isinstance(td, str):
+            td = Path(td)
         if td.exists():
             terrain_dir = td
             break

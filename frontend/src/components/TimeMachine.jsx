@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Clock, Thermometer, AlertTriangle, ChevronLeft, ChevronRight,
-  Play, Pause, Calendar, Satellite, Info, Loader2
+  Play, Pause, Calendar, Satellite, Loader2
 } from 'lucide-react';
 import {
   fetchTemporalDates,
@@ -52,10 +52,10 @@ const formatDateShort = (dateStr) => {
 };
 
 export const TimeMachine = ({
-  liveWeather,
+  _liveWeather,
   onDateSelect = () => {},
   onClose = null,
-  onCompare = null,
+  _onCompare = null,
 }) => {
   // --- State ---
   const [dates, setDates] = useState([]);
@@ -86,7 +86,7 @@ export const TimeMachine = ({
         }
         setLoading(false);
       })
-      .catch((err) => {
+      .catch((_err) => {
         if (cancelled) return;
         setError('Historical Landsat data unavailable.');
         setLoading(false);
@@ -296,11 +296,11 @@ export const TimeMachine = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem' }}>
               <span style={{ color: 'var(--text-muted)' }}>Min</span>
-              <span style={{ color: '#22c55e', fontWeight: 700 }}>{fmt(metadata.min_lst)}°C</span>
+              <span style={{ color: 'var(--hs-vegetation)', fontWeight: 700 }}>{fmt(metadata.min_lst)}°C</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem' }}>
               <span style={{ color: 'var(--text-muted)' }}>Max</span>
-              <span style={{ color: '#dc2626', fontWeight: 700 }}>{fmt(metadata.max_lst)}°C</span>
+              <span style={{ color: 'var(--hs-heat)', fontWeight: 700 }}>{fmt(metadata.max_lst)}°C</span>
             </div>
             {metadata.valid_pixel_fraction !== undefined && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem' }}>

@@ -1,0 +1,344 @@
+/* ==========================================================================
+   HEATSYNC GLOBALS
+   Aggregates all design system layers, applies base resets, and provides
+   utility classes. Import this single file in main.jsx.
+   ========================================================================== */
+
+@import './tokens.css';
+@import './typography.css';
+@import './motion.css';
+
+/* ==========================================================================
+   BASE RESET
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  height: auto;
+}
+
+body {
+  font-family: var(--hs-font-body);
+  font-size: var(--hs-text-base);
+  color: var(--hs-text-primary);
+  background: var(--hs-bg-void);
+  line-height: 1.5;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--hs-font-display);
+  letter-spacing: -0.02em;
+  color: var(--hs-text-primary);
+}
+
+a {
+  color: var(--hs-cyan);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code {
+  font-family: var(--hs-font-mono);
+  font-size: 0.9em;
+  background: var(--hs-bg-tertiary);
+  padding: 0 4px;
+  border-radius: var(--hs-radius-xs);
+}
+
+button {
+  font-family: var(--hs-font-body);
+}
+
+select {
+  font-family: var(--hs-font-body);
+}
+
+input[type="range"] {
+  accent-color: var(--hs-cyan);
+  cursor: pointer;
+  height: 6px;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ==========================================================================
+   FOCUS STATES
+   ========================================================================== */
+:focus-visible {
+  outline: 2px solid var(--hs-cyan);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   SCROLLBAR
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hs-border-default);
+  border-radius: var(--hs-radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hs-border-strong);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hs-border-default) transparent;
+}
+
+/* ==========================================================================
+   SELECTION
+   ========================================================================== */
+::selection {
+  background: var(--hs-cyan-dim);
+  color: var(--hs-text-primary);
+}
+
+/* ==========================================================================
+   UTILITY CLASSES
+   ========================================================================== */
+
+/* --- Surface variants ------------------------------------------------- */
+.hs-glass {
+  background: var(--hs-bg-glass);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--hs-border-subtle);
+}
+
+.hs-surface {
+  background: var(--hs-bg-surface);
+  border: 1px solid var(--hs-border-subtle);
+}
+
+.hs-elevated {
+  background: var(--hs-bg-elevated);
+  border: 1px solid var(--hs-border-default);
+  box-shadow: var(--hs-shadow-md);
+}
+
+/* --- Glow variants ---------------------------------------------------- */
+.hs-glow-heat         { box-shadow: 0 0 20px var(--hs-heat-glow); }
+.hs-glow-cool         { box-shadow: 0 0 20px var(--hs-cool-glow); }
+.hs-glow-vegetation   { box-shadow: 0 0 20px var(--hs-vegetation-glow); }
+.hs-glow-water        { box-shadow: 0 0 20px var(--hs-water-glow); }
+.hs-glow-infrastructure { box-shadow: 0 0 20px var(--hs-infrastructure-glow); }
+.hs-glow-warning      { box-shadow: 0 0 20px var(--hs-warning-glow); }
+.hs-glow-critical     { box-shadow: 0 0 20px var(--hs-critical-glow); }
+.hs-glow-success      { box-shadow: 0 0 20px var(--hs-success-glow); }
+.hs-glow-cyan         { box-shadow: 0 0 20px var(--hs-cyan-glow); }
+.hs-glow-purple       { box-shadow: 0 0 20px var(--hs-purple-glow); }
+
+/* --- Semantic color text helpers --------------------------------------- */
+.hs-color-heat          { color: var(--hs-heat); }
+.hs-color-cool          { color: var(--hs-cool); }
+.hs-color-vegetation    { color: var(--hs-vegetation); }
+.hs-color-water         { color: var(--hs-water); }
+.hs-color-infrastructure { color: var(--hs-infrastructure); }
+.hs-color-warning       { color: var(--hs-warning); }
+.hs-color-critical      { color: var(--hs-critical); }
+.hs-color-success       { color: var(--hs-success); }
+.hs-color-neutral       { color: var(--hs-neutral); }
+.hs-color-cyan          { color: var(--hs-cyan); }
+.hs-color-purple        { color: var(--hs-purple); }
+
+/* --- Semantic status badges -------------------------------------------- */
+.hs-status-live {
+  color: var(--hs-success);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.hs-status-live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hs-success);
+  animation: hs-pulse-glow 2s ease-in-out infinite;
+}
+
+.hs-status-stale {
+  color: var(--hs-warning);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.hs-status-stale::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hs-warning);
+}
+
+.hs-status-offline {
+  color: var(--hs-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.hs-status-offline::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hs-text-muted);
+}
+
+/* --- Layout helpers ---------------------------------------------------- */
+.hs-app-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--hs-bg-void);
+}
+
+.hs-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* --- Page container ---------------------------------------------------- */
+.hs-page-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* --- Page loader ------------------------------------------------------- */
+.hs-page-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hs-space-3);
+  min-height: 400px;
+}
+
+.hs-page-loader-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--hs-border-default);
+  border-top-color: var(--hs-cyan);
+  border-radius: 50%;
+  animation: hs-spin 0.8s linear infinite;
+}
+
+/* --- Theme toggle ------------------------------------------------------ */
+.hs-theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--hs-radius-md);
+  border: 1px solid var(--hs-border-default);
+  background: var(--hs-bg-primary);
+  color: var(--hs-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: border-color var(--hs-transition-fast), color var(--hs-transition-fast);
+}
+
+.hs-theme-toggle:hover {
+  border-color: var(--hs-border-accent);
+  color: var(--hs-cyan);
+}
+
+/* --- Button variants --------------------------------------------------- */
+.hs-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hs-space-2);
+  padding: var(--hs-space-2) var(--hs-space-4);
+  border: none;
+  border-radius: var(--hs-radius-md);
+  background: linear-gradient(135deg, var(--hs-cyan), #2563eb);
+  color: #fff;
+  font-size: var(--hs-text-sm);
+  font-weight: var(--hs-weight-bold);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 217, 255, 0.25);
+  transition: transform var(--hs-transition-fast), box-shadow var(--hs-transition-fast);
+}
+
+.hs-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 217, 255, 0.35);
+}
+
+.hs-btn-primary:active {
+  transform: translateY(1px);
+}
+
+.hs-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hs-space-2);
+  padding: var(--hs-space-2) var(--hs-space-4);
+  border: 1px solid var(--hs-border-default);
+  border-radius: var(--hs-radius-md);
+  background: var(--hs-bg-primary);
+  color: var(--hs-text-secondary);
+  font-size: var(--hs-text-sm);
+  font-weight: var(--hs-weight-semibold);
+  cursor: pointer;
+  transition: border-color var(--hs-transition-fast), color var(--hs-transition-fast);
+}
+
+.hs-btn-secondary:hover {
+  border-color: var(--hs-border-accent);
+  color: var(--hs-cyan);
+}
+
+/* --- Skeleton loading -------------------------------------------------- */
+.hs-skeleton {
+  border-radius: var(--hs-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--hs-bg-tertiary) 25%,
+    var(--hs-border-subtle) 50%,
+    var(--hs-bg-tertiary) 75%
+  );
+  background-size: 800px 100%;
+  animation: hs-shimmer 1.4s infinite linear;
+}
+
+/* --- Dot pulse --------------------------------------------------------- */
+.hs-dot-pulse {
+  width: 8px;
+  height: 8px;
+  background-color: var(--hs-success);
+  border-radius: 50%;
+  display: inline-block;
+  animation: hs-pulse-glow 2s infinite;
+}
+
+/* --- Spinner ----------------------------------------------------------- */
+.hs-spinner {
+  animation: hs-spin 1s linear infinite;
+}

@@ -15,9 +15,7 @@ export function fetchCoolingPotential() {
   return fetchJson('/city/cooling-potential');
 }
 
-export function fetchCoolingPotentialGeoJson() {
-  return fetchJson('/city/cooling-potential/geojson');
-}
+// fetchCoolingPotentialGeoJson is exported from backendClient.js
 
 // Ranked "where should we intervene?" opportunities.
 export function fetchInterventions(perScenario = 5) {
@@ -29,13 +27,23 @@ export function fetchExplain(lat, lng) {
   return fetchJson(`/city/explain?lat=${lat}&lng=${lng}`);
 }
 
-// Heat-safe route — fastest vs lower-heat-exposure routing.
-export function fetchHeatSafeRoute(start, end) {
+// Heat-safe route — fastest vs cooler vs balanced routing.
+// Supports configurable weights and optional departure_time.
+export function fetchHeatSafeRoute(start, end, options = {}) {
   const params = [
     `start_lat=${start.lat}`,
     `start_lng=${start.lng}`,
     `end_lat=${end.lat}`,
-    `end_lng=${end.lng}`
-  ].join('&');
-  return fetchJson(`/routing/heat-safe?${params}`);
+    `end_lng=${end.lng}`,
+  ];
+  if (options.departureTime) params.push(`departure_time=${encodeURIComponent(options.departureTime)}`);
+  if (options.weights) {
+    const w = options.weights;
+    if (w.distance !== undefined) params.push(`weight_distance=${w.distance}`);
+    if (w.heat !== undefined) params.push(`weight_heat=${w.heat}`);
+    if (w.aqi !== undefined) params.push(`weight_aqi=${w.aqi}`);
+    if (w.shade !== undefined) params.push(`weight_shade=${w.shade}`);
+    if (w.vegetation !== undefined) params.push(`weight_vegetation=${w.vegetation}`);
+  }
+  return fetchJson(`/routing/heat-safe?${params.join('&')}`);
 }

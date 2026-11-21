@@ -5,7 +5,7 @@ import {
   Building2, Layers, RotateCcw, Route, Trees, Waves,
   MapPin, Maximize, Minimize, Orbit, Home, Camera, Crosshair
 } from 'lucide-react';
-import { fetchBoundary, fetchLayerGeoJson, fetchCurrentHeatPredictions, fetchJson } from '../services/backendClient';
+import { fetchBoundary, fetchLayerGeoJson, fetchCurrentHeatPredictions } from '../services/backendClient';
 import { computeAreaStats, featureDisplayName } from '../services/areaStats';
 
 const LOCAL_LAYER_BASE = '/3d-layers';
@@ -59,6 +59,23 @@ const OVERLAY_BY_KEY = {
 const COOLING_CLASS_COLORS = {
   'VERY HIGH': '#1a9641', HIGH: '#66bd63', MODERATE: '#fee08b', LOW: '#d73027'
 };
+
+function normalizeImageBounds(coords) {
+  if (!Array.isArray(coords) || coords.length !== 4) return coords;
+  const lngs = coords.map((c) => c[0]);
+  const lats = coords.map((c) => c[1]);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  // MapLibre requires: [top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW)]
+  return [
+    [minLng, maxLat],
+    [maxLng, maxLat],
+    [maxLng, minLat],
+    [minLng, minLat]
+  ];
+}
 
 function boundsFromGeoJson(geojson) {
   const coords = [];
@@ -139,42 +156,6 @@ function setVisibility(map, ids, visible) {
   ids.forEach((id) => {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
   });
-}
-
-function setThermalMapMode(mode) {
-  setMapMode(mode);
-  const map = mapRef.current;
-  if (!map || !mapReady) return;
-
-  // Only change visibility - never remove sources to prevent race conditions
-  const modes = {
-    current: {
-      'current-prediction-layer': 'visible',
-      'scenario-prediction-layer': 'none',
-      'scenario-delta-layer': 'none'
-    },
-    scenario: {
-      'current-prediction-layer': 'none',
-      'scenario-prediction-layer': 'visible',
-      'scenario-delta-layer': 'none'
-    },
-    difference: {
-      'current-prediction-layer': 'none',
-      'scenario-prediction-layer': 'none',
-      'scenario-delta-layer': 'visible'
-    }
-  };
-
-  const visibility = modes[mode];
-  if (map.getLayer('current-prediction-layer')) {
-    map.setLayoutProperty('current-prediction-layer', 'visibility', visibility.current);
-  }
-  if (map.getLayer('scenario-prediction-layer')) {
-    map.setLayoutProperty('scenario-prediction-layer', 'visibility', visibility.scenario);
-  }
-  if (map.getLayer('scenario-delta-layer')) {
-    map.setLayoutProperty('scenario-delta-layer', 'visibility', visibility.difference);
-  }
 }
 
 function firstProperty(properties, keys, fallback = 'Unnamed feature') {
@@ -266,10 +247,27 @@ export function DigitalTwinMap3D({
   selectedPoint = null,
   theme = 'light',
   liveWeather = null,
-  onMapClick = null
+  onMapClick = null,
+  customBuilding = null,
+  onBuildingDrag = null,
+  onBuildingMove = null,
+  // Overlay visibility — parent pages can hide internal overlays
+  // when they provide their own UI in the same zone.
+  showInfoPanel = true,
+  showCameraControls = true,
+  showCoords = true,
+  showSourceCard = true,
+  showScenarioLegend = true,
+  showVulnerableZones = false,
 }) {
   const containerRef = useRef(null);
+  const buildingMarkersRef = useRef([]);
+  const vulnerableMarkersRef = useRef([]);
   const mapRef = useRef(null);
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
+  const onSelectLocationRef = useRef(onSelectLocation);
+  onSelectLocationRef.current = onSelectLocation;
   const popupRef = useRef(null);
   const boundaryRef = useRef(null);
   const collectionsRef = useRef({});
@@ -278,7 +276,6 @@ export function DigitalTwinMap3D({
   const historicalRef = useRef(historicalLayerData);
   historicalRef.current = historicalLayerData;
   const cellHandlersBoundRef = useRef(false);
-  const lastScenarioDataRef = useRef(null);
   const markerRef = useRef(null);
   const currentHeatGridRef = useRef(null);
   const staticGridGeoJsonRef = useRef(null);
@@ -286,7 +283,7 @@ export function DigitalTwinMap3D({
   const heatGridHandlersBoundRef = useRef(false);
   const [staticGridReady, setStaticGridReady] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const [mapMode, setMapMode] = useState('current');
+  const [mapMode] = useState('current');
   const [counts, setCounts] = useState({ buildings: 0, roads: 0, green: 0, water: 0, trees: 0 });
   const [status, setStatus] = useState({ loading: true, message: 'Loading 3D city layers', source: '' });
   const [cursorLngLat, setCursorLngLat] = useState(null);
@@ -304,14 +301,14 @@ export function DigitalTwinMap3D({
       container: containerRef.current,
       style: OSM_RASTER_STYLE,
       center: [85.8275, 20.2636],
-      zoom: 11.3,
-      pitch: 58,
+      zoom: 12.0,
+      pitch: 62,
       bearing: -22,
-      maxPitch: 75,
+      maxPitch: 85,
       antialias: true
     });
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-left');
 
     // Keep the canvas sized to its container: the map can mount while the
@@ -418,27 +415,76 @@ export function DigitalTwinMap3D({
           paint: { 'line-color': '#e2e8f0', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 15, 2], 'line-opacity': 0.6 }
         });
 
-        // Buildings (3D extrusion, real heights with honest default fallback)
-        // Height hierarchy: measured > GIS > OSM levels × 3.2m > estimated 6m
-        // Buildings with estimated heights are colored differently (purple)
+        // 3D Terrain elevation mesh across the entire digital twin
+        try {
+          map.setTerrain({ source: 'dem-tiles', exaggeration: 1.8 });
+        } catch {
+          // Fallback if terrain is not active
+        }
+
+        // Configure 3D directional lighting for realistic building facade shadows & highlights
+        try {
+          map.setLight({
+            anchor: 'viewport',
+            color: '#ffffff',
+            intensity: 0.65,
+            position: [1.5, 180, 50]
+          });
+        } catch {
+          // Ignored if style does not support setLight
+        }
+
+        // Crisp 3D Building Base Outline / Anchor
         addLayerIfMissing(map, {
-          id: 'building-extrusion', type: 'fill-extrusion', source: 'buildings',
+          id: 'building-outlines',
+          type: 'line',
+          source: 'buildings',
+          paint: {
+            'line-color': theme === 'dark' ? 'rgba(56, 189, 248, 0.4)' : 'rgba(37, 99, 235, 0.35)',
+            'line-width': 1.2,
+            'line-opacity': 0.85
+          }
+        });
+
+        // Buildings (Towering Volumetric 3D extrusion with realistic urban heights & architectural palettes)
+        addLayerIfMissing(map, {
+          id: 'building-extrusion',
+          type: 'fill-extrusion',
+          source: 'buildings',
           paint: {
             'fill-extrusion-color': [
               'case',
-              ['==', ['get', 'height_source'], 'visual_default_not_measured'], ['literal', '#7c3aed'],
-              ['==', ['get', 'height_source'], 'OSM_LEVELS_ESTIMATED'], ['literal', '#8b5cf6'],
-              ['literal', '#2563eb']
+              ['==', ['get', 'building'], 'commercial'], '#38bdf8',
+              ['==', ['get', 'building'], 'office'], '#0ea5e9',
+              ['==', ['get', 'building'], 'apartments'], '#818cf8',
+              ['==', ['get', 'building'], 'residential'], '#6366f1',
+              ['==', ['get', 'building'], 'hospital'], '#f43f5e',
+              ['==', ['get', 'building'], 'civic'], '#06b6d4',
+              ['==', ['get', 'building'], 'school'], '#10b981',
+              ['==', ['get', 'building'], 'university'], '#a855f7',
+              ['==', ['get', 'height_source'], 'visual_default_not_measured'], '#7c3aed',
+              ['==', ['get', 'height_source'], 'OSM_LEVELS_ESTIMATED'], '#8b5cf6',
+              '#6366f1'
             ],
             'fill-extrusion-height': [
               'case',
               ['>', ['to-number', ['get', 'render_height_m'], 0], 0], ['to-number', ['get', 'render_height_m']],
               ['>', ['to-number', ['get', 'height_m'], 0], 0], ['to-number', ['get', 'height_m']],
-              ['>', ['to-number', ['get', 'levels'], 0], 0], ['*', ['to-number', ['get', 'levels']], 3.2],
-              6
+              ['>', ['to-number', ['get', 'height'], 0], 0], ['to-number', ['get', 'height']],
+              ['>', ['to-number', ['get', 'levels'], 0], 0], ['*', ['to-number', ['get', 'levels']], 4.2],
+              ['>', ['to-number', ['get', 'building:levels'], 0], 0], ['*', ['to-number', ['get', 'building:levels']], 4.2],
+              ['==', ['get', 'building'], 'office'], 55,
+              ['==', ['get', 'building'], 'apartments'], 44,
+              ['==', ['get', 'building'], 'commercial'], 36,
+              ['==', ['get', 'building'], 'hospital'], 32,
+              ['==', ['get', 'building'], 'university'], 28,
+              ['==', ['get', 'building'], 'civic'], 26,
+              ['==', ['get', 'building'], 'school'], 20,
+              ['==', ['get', 'building'], 'residential'], 24,
+              24 // Boosted 24m default extrusion for rich 3D cityscape
             ],
             'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.74,
+            'fill-extrusion-opacity': 0.92,
             'fill-extrusion-vertical-gradient': true
           }
         });
@@ -505,8 +551,8 @@ export function DigitalTwinMap3D({
           const feature = map.queryRenderedFeatures(e.point)[0] || null;
           const name = feature ? featureDisplayName(feature) : 'Selected point';
           const stats = computeAreaStats(collectionsRef.current, e.lngLat.lng, e.lngLat.lat, 150);
-          onSelectLocation({ name, lat: e.lngLat.lat, lng: e.lngLat.lng, stats });
-          onMapClick?.(e.lngLat);
+          onSelectLocationRef.current?.({ name, lat: e.lngLat.lat, lng: e.lngLat.lng, stats });
+          onMapClickRef.current?.(e.lngLat);
         });
 
         const bounds = boundsFromGeoJson(boundaryResult.data);
@@ -654,26 +700,47 @@ export function DigitalTwinMap3D({
   // ------------------------------------------------------------------ #
   // Raster overlays (image sources from the real GeoTIFF renderings)
   // ------------------------------------------------------------------ #
+  const [internalOverlayMeta, setInternalOverlayMeta] = useState(overlayMeta || {});
+
+  useEffect(() => {
+    if (overlayMeta && Object.keys(overlayMeta).length > 0) {
+      setInternalOverlayMeta(overlayMeta);
+      return;
+    }
+    fetch('/overlays/overlays.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.overlays) {
+          const map = {};
+          Object.values(data.overlays).forEach((o) => { map[o.key] = o; });
+          setInternalOverlayMeta(map);
+        }
+      })
+      .catch((err) => console.warn('DigitalTwinMap3D: Failed to load overlays.json', err));
+  }, [overlayMeta]);
+
+  const effectiveOverlayMeta = (overlayMeta && Object.keys(overlayMeta).length > 0) ? overlayMeta : internalOverlayMeta;
+
   const overlayEntries = useMemo(
-    () => Object.entries(OVERLAY_BY_KEY).filter(([, asset]) => overlayMeta[asset]),
-    [overlayMeta]
+    () => Object.entries(OVERLAY_BY_KEY).filter(([key, asset]) => key !== 'predicted_lst' && effectiveOverlayMeta[asset]),
+    [effectiveOverlayMeta]
   );
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     overlayEntries.forEach(([key, asset]) => {
-      const meta = overlayMeta[asset];
+      const meta = effectiveOverlayMeta[asset];
       const group = Object.keys(layers).find((g) => layers[g] && layers[g][key] === true);
       const visible = Boolean(group) && availability[key] !== false;
       const layerId = `overlay-${key}`;
       const sourceId = `overlay-src-${key}`;
-      if (visible) {
+      if (visible && meta?.url && meta?.bounds_wgs84) {
         if (!map.getSource(sourceId)) {
           map.addSource(sourceId, {
             type: 'image',
             url: meta.url,
-            coordinates: meta.bounds_wgs84
+            coordinates: normalizeImageBounds(meta.bounds_wgs84)
           });
         }
         if (!map.getLayer(layerId)) {
@@ -696,7 +763,7 @@ export function DigitalTwinMap3D({
         removeSourceIfPresent(map, sourceId);
       }
     });
-  }, [mapReady, overlayEntries, overlayMeta, layers, availability, opacities]);
+  }, [mapReady, overlayEntries, effectiveOverlayMeta, layers, availability, opacities]);
 
   // ------------------------------------------------------------------ #
   // Current predicted LST heat grid overlay
@@ -901,7 +968,6 @@ export function DigitalTwinMap3D({
     }
 
     const data = overlay.geojson;
-    const mode = overlay.mode || 'DIFFERENCE';
 
     // === Build scenario prediction source ===
     // The geojson features have properties: grid_id, baseline_lst, scenario_lst, delta_lst
@@ -930,18 +996,24 @@ export function DigitalTwinMap3D({
     const deltaFC = { type: 'FeatureCollection', features: deltaFeatures };
 
     if (!map.getSource('scenario-delta-source')) {
-      map.addSource('scenario-delta-source', deltaFC);
+      map.addSource('scenario-delta-source', { type: 'geojson', data: deltaFC });
     } else {
       map.getSource('scenario-delta-source').setData(deltaFC);
     }
 
+    const activeMode = (overlay.mode || 'DIFFERENCE').toLowerCase();
+
     // === Scenario prediction layer ===
-    // Color based on scenario_lst
+    // Realistic thermal color ramp (blue -> green -> yellow -> red)
     const scenarioColorExpr = [
       'interpolate', ['linear'], ['get', 'scenario_lst'],
-      0, '#2c7bb6',
-      25, '#fdae61',
-      50, '#d7191c'
+      24, 'rgba(49, 54, 149, 0.70)',
+      30, 'rgba(69, 117, 180, 0.70)',
+      34, 'rgba(116, 173, 209, 0.70)',
+      38, 'rgba(253, 174, 97, 0.75)',
+      42, 'rgba(244, 109, 67, 0.80)',
+      46, 'rgba(215, 48, 39, 0.85)',
+      52, 'rgba(165, 0, 38, 0.90)'
     ];
 
     if (!map.getLayer('scenario-prediction-layer')) {
@@ -949,21 +1021,29 @@ export function DigitalTwinMap3D({
         id: 'scenario-prediction-layer',
         type: 'fill',
         source: 'scenario-prediction-source',
-        paint: { 'fill-color': scenarioColorExpr },
-        layout: { visibility: mapMode === 'scenario' ? 'visible' : 'none' }
+        paint: {
+          'fill-color': scenarioColorExpr,
+          'fill-opacity': 0.75
+        },
+        layout: { visibility: activeMode === 'scenario' ? 'visible' : 'none' }
       }, 'roads-major');
     } else {
       map.setPaintProperty('scenario-prediction-layer', 'fill-color', scenarioColorExpr);
-      map.setLayoutProperty('scenario-prediction-layer', 'visibility', mapMode === 'scenario' ? 'visible' : 'none');
+      map.setPaintProperty('scenario-prediction-layer', 'fill-opacity', 0.75);
+      map.setLayoutProperty('scenario-prediction-layer', 'visibility', activeMode === 'scenario' ? 'visible' : 'none');
     }
 
     // === Scenario delta layer ===
-    // Color based on delta_lst (negative = cooling, positive = warming)
+    // Negative = cooling (blue/cyan), Zero = TRANSPARENT (reveals map/buildings), Positive = warming (red/orange)
     const deltaColorExpr = [
       'interpolate', ['linear'], ['get', 'delta_lst'],
-      -5, '#2166ac',
-      0, '#f7f7f7',
-      5, '#b2182b'
+      -3.0, 'rgba(33, 102, 172, 0.85)',
+      -1.5, 'rgba(67, 147, 195, 0.75)',
+      -0.2, 'rgba(146, 197, 222, 0.40)',
+      0.0,  'rgba(255, 255, 255, 0.00)', // Completely transparent on 0 delta!
+      0.2,  'rgba(244, 165, 130, 0.40)',
+      1.5,  'rgba(214, 96, 77, 0.75)',
+      3.0,  'rgba(178, 24, 43, 0.85)'
     ];
 
     if (!map.getLayer('scenario-delta-layer')) {
@@ -971,14 +1051,18 @@ export function DigitalTwinMap3D({
         id: 'scenario-delta-layer',
         type: 'fill',
         source: 'scenario-delta-source',
-        paint: { 'fill-color': deltaColorExpr },
-        layout: { visibility: mapMode === 'difference' ? 'visible' : 'none' }
+        paint: {
+          'fill-color': deltaColorExpr,
+          'fill-opacity': 0.80
+        },
+        layout: { visibility: activeMode === 'difference' ? 'visible' : 'none' }
       }, 'roads-major');
     } else {
       map.setPaintProperty('scenario-delta-layer', 'fill-color', deltaColorExpr);
-      map.setLayoutProperty('scenario-delta-layer', 'visibility', mapMode === 'difference' ? 'visible' : 'none');
+      map.setPaintProperty('scenario-delta-layer', 'fill-opacity', 0.80);
+      map.setLayoutProperty('scenario-delta-layer', 'visibility', activeMode === 'difference' ? 'visible' : 'none');
     }
-  }, [mapReady, scenarioOverlay, mapMode]);
+  }, [mapReady, scenarioOverlay]);
 
   // ------------------------------------------------------------------ #
   // Hotspots layer
@@ -1189,56 +1273,138 @@ export function DigitalTwinMap3D({
   }, [mapReady, historicalLayerData, historicalDate]);
 
   // ------------------------------------------------------------------ #
-  // Route layers (fastest + lower-heat)
+  // ------------------------------------------------------------------ #
+  // Route layers (fastest, coolest, balanced + markers)
   // ------------------------------------------------------------------ #
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapReady ? mapRef.current : null;
     if (!map || !mapReady) return;
+
     const f = routeData?.fastest;
     const c = routeData?.coolest;
+    const b = routeData?.balanced;
+    const selected = routeData?.selectedRoute || 'coolest';
+
     const addRoute = (id, geometry, color) => {
       const sourceId = `route-${id}`;
-      if (!geometry) {
-        removeLayerIfPresent(map, `route-line-${id}`);
+      const layerId = `route-line-${id}`;
+      const glowLayerId = `route-glow-${id}`;
+
+      if (!geometry || !geometry.coordinates || !geometry.coordinates.length) {
+        removeLayerIfPresent(map, glowLayerId);
+        removeLayerIfPresent(map, layerId);
         removeSourceIfPresent(map, sourceId);
         return;
       }
-      if (!map.getSource(sourceId)) {
-        map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry }] } });
+
+      const isSelected = selected === id;
+      const data = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry }] };
+      addOrUpdateSource(map, sourceId, data);
+
+      // Glow layer for selected route
+      if (isSelected) {
+        if (!map.getLayer(glowLayerId)) {
+          addLayerIfMissing(map, {
+            id: glowLayerId,
+            type: 'line',
+            source: sourceId,
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: {
+              'line-color': color,
+              'line-width': 9,
+              'line-opacity': 0.35,
+              'line-blur': 3
+            }
+          });
+        } else {
+          map.setPaintProperty(glowLayerId, 'line-color', color);
+          map.setPaintProperty(glowLayerId, 'line-opacity', 0.35);
+        }
       } else {
-        map.getSource(sourceId).setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry }] });
+        removeLayerIfPresent(map, glowLayerId);
       }
-      if (!map.getLayer(`route-line-${id}`)) {
-        map.addLayer({
-          id: `route-line-${id}`, type: 'line', source: sourceId,
+
+      // Core route line
+      if (!map.getLayer(layerId)) {
+        addLayerIfMissing(map, {
+          id: layerId,
+          type: 'line',
+          source: sourceId,
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': color, 'line-width': 4.5, 'line-opacity': 0.95, 'line-dasharray': [1, 0.6] }
+          paint: {
+            'line-color': color,
+            'line-width': isSelected ? 5.5 : 2.5,
+            'line-opacity': isSelected ? 0.98 : 0.45,
+            ...(isSelected ? {} : { 'line-dasharray': [3, 2] })
+          }
         });
+      } else {
+        map.setPaintProperty(layerId, 'line-color', color);
+        map.setPaintProperty(layerId, 'line-width', isSelected ? 5.5 : 2.5);
+        map.setPaintProperty(layerId, 'line-opacity', isSelected ? 0.98 : 0.45);
+        if (isSelected) {
+          map.setPaintProperty(layerId, 'line-dasharray', [1, 0]);
+        } else {
+          map.setPaintProperty(layerId, 'line-dasharray', [3, 2]);
+        }
       }
     };
+
     addRoute('fastest', f?.geometry, '#0284c7');
     addRoute('coolest', c?.geometry, '#16a34a');
-    if (f?.geometry && c?.geometry) {
+    addRoute('balanced', b?.geometry, '#a78bfa');
+
+    const allCoords = [];
+    if (f?.geometry?.coordinates) allCoords.push(...f.geometry.coordinates);
+    if (c?.geometry?.coordinates) allCoords.push(...c.geometry.coordinates);
+    if (b?.geometry?.coordinates) allCoords.push(...b.geometry.coordinates);
+
+    if (allCoords.length >= 2) {
       const bounds = new maplibregl.LngLatBounds();
-      [...f.geometry.coordinates, ...c.geometry.coordinates].forEach(([lng, lat]) => bounds.extend([lng, lat]));
-      map.fitBounds(bounds, { padding: 80, pitch: 55, duration: 900 });
+      allCoords.forEach(([lng, lat]) => bounds.extend([lng, lat]));
+      map.fitBounds(bounds, { padding: 90, pitch: 52, duration: 1000 });
     }
   }, [mapReady, routeData]);
 
   // ------------------------------------------------------------------ #
-  // Fly-to (search results, hotspots, interventions)
+  // Fly-to (search results, hotspots, interventions, sites)
   // ------------------------------------------------------------------ #
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !flyTo) return;
-    map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom ?? 14, pitch: 58, duration: 1400 });
+
+    let targetLng = null;
+    let targetLat = null;
+
+    if (Array.isArray(flyTo) && flyTo.length >= 2) {
+      [targetLng, targetLat] = flyTo;
+    } else if (Array.isArray(flyTo.center) && flyTo.center.length >= 2) {
+      [targetLng, targetLat] = flyTo.center;
+    } else if (typeof flyTo.lng === 'number' && typeof flyTo.lat === 'number') {
+      targetLng = flyTo.lng;
+      targetLat = flyTo.lat;
+    } else if (typeof flyTo.longitude === 'number' && typeof flyTo.latitude === 'number') {
+      targetLng = flyTo.longitude;
+      targetLat = flyTo.latitude;
+    }
+
+    if (targetLng == null || targetLat == null || Number.isNaN(targetLng) || Number.isNaN(targetLat)) {
+      return;
+    }
+
+    map.flyTo({
+      center: [Number(targetLng), Number(targetLat)],
+      zoom: flyTo.zoom ?? 14,
+      pitch: flyTo.pitch ?? 58,
+      duration: 1400
+    });
   }, [mapReady, flyTo]);
 
   // ------------------------------------------------------------------ #
   // Selected-point marker
   // ------------------------------------------------------------------ #
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapReady ? mapRef.current : null;
     if (!map || !mapReady) return;
     if (markerRef.current) {
       markerRef.current.remove();
@@ -1253,6 +1419,419 @@ export function DigitalTwinMap3D({
         .addTo(map);
     }
   }, [mapReady, selectedPoint]);
+
+  // ------------------------------------------------------------------ #
+  // Proposed Custom Buildings (Single or Multi-Building Planning Studio)
+  // ------------------------------------------------------------------ #
+  useEffect(() => {
+    const map = mapReady ? mapRef.current : null;
+    if (!map || !mapReady) return;
+
+    const sourceId = 'custom-proposed-building-src';
+    const fillLayerId = 'custom-proposed-building-fill';
+    const haloLayerId = 'custom-proposed-building-halo';
+
+    // Normalize to array
+    const rawList = Array.isArray(customBuilding)
+      ? customBuilding
+      : customBuilding && typeof customBuilding === 'object' && typeof customBuilding.lat === 'number'
+        ? [customBuilding]
+        : [];
+
+    const buildingList = rawList.filter(b => b && typeof b.lat === 'number' && typeof b.lng === 'number');
+
+    if (!buildingList.length) {
+      removeLayerIfPresent(map, fillLayerId);
+      removeLayerIfPresent(map, haloLayerId);
+      removeSourceIfPresent(map, sourceId);
+      return;
+    }
+
+    const features = [];
+
+    buildingList.forEach((bldg, idx) => {
+      const {
+        lat, lng, floors = 4, footprint = 800, orientation = 0,
+        color = '#8b5cf6', thermalDelta = 0, name = `Building ${idx + 1}`
+      } = bldg;
+
+      const heightM = Number(bldg.height_m ?? (floors * 3.3));
+      const sideM = Math.sqrt(Math.max(100, footprint));
+      const hw = sideM / 2;
+      const hl = sideM / 2;
+      const rad = (orientation * Math.PI) / 180;
+
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+
+      const mToLat = 1 / 111320;
+      const mToLng = 1 / (111320 * Math.max(0.1, Math.cos((lat * Math.PI) / 180)));
+
+      // 4 corners of proposed building
+      const corners = [
+        [-hw * cos - -hl * sin, -hw * sin + -hl * cos],
+        [hw * cos - -hl * sin, hw * sin + -hl * cos],
+        [hw * cos - hl * sin, hw * sin + hl * cos],
+        [-hw * cos - hl * sin, -hw * sin + hl * cos],
+      ];
+
+      const polyCoords = corners.map(([dx, dy]) => [lng + dx * mToLng, lat + dy * mToLat]);
+      polyCoords.push(polyCoords[0]);
+
+      // Surrounding thermal buffer halo
+      const haloBufferM = sideM * 0.65;
+      const haloCorners = [
+        [-(hw + haloBufferM) * cos - -(hl + haloBufferM) * sin, -(hw + haloBufferM) * sin + -(hl + haloBufferM) * cos],
+        [(hw + haloBufferM) * cos - -(hl + haloBufferM) * sin, (hw + haloBufferM) * sin + -(hl + haloBufferM) * cos],
+        [(hw + haloBufferM) * cos - (hl + haloBufferM) * sin, (hw + haloBufferM) * sin + (hl + haloBufferM) * cos],
+        [-(hw + haloBufferM) * cos - (hl + haloBufferM) * sin, -(hw + haloBufferM) * sin + (hl + haloBufferM) * cos],
+      ];
+      const haloCoords = haloCorners.map(([dx, dy]) => [lng + dx * mToLng, lat + dy * mToLat]);
+      haloCoords.push(haloCoords[0]);
+
+      // Building 3D extrusion feature
+      features.push({
+        type: 'Feature',
+        properties: {
+          is_building: true,
+          id: bldg.id || `custom-bldg-${idx}`,
+          name: name,
+          height: heightM,
+          color: color
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [polyCoords]
+        }
+      });
+
+      // Halo feature
+      features.push({
+        type: 'Feature',
+        properties: {
+          is_halo: true,
+          id: `halo-${idx}`,
+          halo_color: thermalDelta <= 0 ? '#22c55e' : '#ef4444'
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [haloCoords]
+        }
+      });
+    });
+
+    // Compute and add the Buildable Parcel & Open Space Zone Envelope
+    const centerLat = buildingList.reduce((sum, b) => sum + b.lat, 0) / buildingList.length;
+    const centerLng = buildingList.reduce((sum, b) => sum + b.lng, 0) / buildingList.length;
+    const parcelRadiusM = 105;
+    const mToLat = 1 / 111320;
+    const mToLng = 1 / (111320 * Math.max(0.1, Math.cos((centerLat * Math.PI) / 180)));
+
+    const parcelCorners = [];
+    for (let i = 0; i <= 12; i++) {
+      const angle = (i * 30 * Math.PI) / 180;
+      parcelCorners.push([
+        centerLng + Math.cos(angle) * parcelRadiusM * mToLng,
+        centerLat + Math.sin(angle) * parcelRadiusM * mToLat
+      ]);
+    }
+
+    features.push({
+      type: 'Feature',
+      properties: {
+        is_parcel: true,
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [parcelCorners]
+      }
+    });
+
+    const featureCollection = {
+      type: 'FeatureCollection',
+      features
+    };
+
+    addOrUpdateSource(map, sourceId, featureCollection);
+
+    const parcelFillId = 'custom-parcel-fill-layer';
+    const parcelLineId = 'custom-parcel-line-layer';
+
+    // Parcel Open Space Fill
+    if (!map.getLayer(parcelFillId)) {
+      addLayerIfMissing(map, {
+        id: parcelFillId,
+        type: 'fill',
+        source: sourceId,
+        filter: ['==', ['get', 'is_parcel'], true],
+        paint: {
+          'fill-color': '#22c55e',
+          'fill-opacity': 0.08
+        }
+      }, 'roads-major');
+    }
+
+    // Parcel Boundary Dashed Outline
+    if (!map.getLayer(parcelLineId)) {
+      addLayerIfMissing(map, {
+        id: parcelLineId,
+        type: 'line',
+        source: sourceId,
+        filter: ['==', ['get', 'is_parcel'], true],
+        paint: {
+          'line-color': '#22c55e',
+          'line-width': 2,
+          'line-dasharray': [3, 2],
+          'line-opacity': 0.8
+        }
+      }, 'roads-major');
+    }
+
+    // Thermal ground halo
+    if (!map.getLayer(haloLayerId)) {
+      addLayerIfMissing(map, {
+        id: haloLayerId,
+        type: 'fill',
+        source: sourceId,
+        filter: ['==', ['get', 'is_halo'], true],
+        paint: {
+          'fill-color': ['get', 'halo_color'],
+          'fill-opacity': 0.38
+        }
+      }, 'roads-major');
+    } else {
+      map.setPaintProperty(haloLayerId, 'fill-color', ['get', 'halo_color']);
+    }
+
+    // 3D Building extrusion
+    if (!map.getLayer(fillLayerId)) {
+      addLayerIfMissing(map, {
+        id: fillLayerId,
+        type: 'fill-extrusion',
+        source: sourceId,
+        filter: ['==', ['get', 'is_building'], true],
+        paint: {
+          'fill-extrusion-color': ['get', 'color'],
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.95,
+          'fill-extrusion-vertical-gradient': true
+        }
+      });
+    } else {
+      map.setPaintProperty(fillLayerId, 'fill-extrusion-color', ['get', 'color']);
+      map.setPaintProperty(fillLayerId, 'fill-extrusion-height', ['get', 'height']);
+    }
+  }, [mapReady, customBuilding]);
+
+  // ------------------------------------------------------------------ #
+  // Draggable Building Cursor Markers
+  // ------------------------------------------------------------------ #
+  useEffect(() => {
+    const map = mapReady ? mapRef.current : null;
+    if (!map || !mapReady) return;
+
+    // Clean up previous building markers
+    buildingMarkersRef.current.forEach(m => m.remove());
+    buildingMarkersRef.current = [];
+
+    const rawList = Array.isArray(customBuilding)
+      ? customBuilding
+      : customBuilding && typeof customBuilding === 'object' && typeof customBuilding.lat === 'number'
+        ? [customBuilding]
+        : [];
+
+    const buildingList = rawList.filter(b => b && typeof b.lat === 'number' && typeof b.lng === 'number');
+
+    buildingList.forEach((bldg, idx) => {
+      const bldgId = bldg.id || `custom-bldg-${idx}`;
+      const bldgName = bldg.name || `Tower ${idx + 1}`;
+      const bldgColor = bldg.color || '#38bdf8';
+
+      const el = document.createElement('div');
+      el.className = 'custom-bldg-drag-anchor';
+      el.style.cursor = 'grab';
+      el.style.userSelect = 'none';
+      el.style.pointerEvents = 'auto';
+      el.innerHTML = `
+        <div style="
+          background: rgba(15, 23, 42, 0.92);
+          backdrop-filter: blur(12px);
+          border: 2px solid ${bldgColor};
+          border-radius: 9999px;
+          padding: 4px 10px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+          font-family: inherit;
+          white-space: nowrap;
+          transform: translate(-50%, -100%);
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        ">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${bldgColor}; box-shadow:0 0 8px ${bldgColor};"></span>
+          <span style="color:#f8fafc; font-size:11px; font-weight:800; letter-spacing:0.02em;">${bldgName}</span>
+          <span style="color:#38bdf8; font-size:9px; font-weight:700; background:rgba(56, 189, 248, 0.15); padding:1px 4px; border-radius:3px;">DRAG ME</span>
+        </div>
+      `;
+
+      const marker = new maplibregl.Marker({
+        element: el,
+        draggable: true,
+        anchor: 'bottom'
+      })
+        .setLngLat([bldg.lng, bldg.lat])
+        .addTo(map);
+
+      el.addEventListener('mouseenter', () => {
+        el.style.transform = 'scale(1.08)';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.transform = 'scale(1)';
+      });
+      el.addEventListener('mousedown', () => {
+        el.style.cursor = 'grabbing';
+      });
+
+      marker.on('drag', () => {
+        const { lng, lat } = marker.getLngLat();
+        if (onBuildingDrag) {
+          onBuildingDrag(bldgId, { lat, lng });
+        }
+      });
+
+      marker.on('dragend', () => {
+        el.style.cursor = 'grab';
+        const { lng, lat } = marker.getLngLat();
+        if (onBuildingMove) {
+          onBuildingMove(bldgId, { lat, lng });
+        } else if (onBuildingDrag) {
+          onBuildingDrag(bldgId, { lat, lng });
+        }
+      });
+
+      buildingMarkersRef.current.push(marker);
+    });
+
+    return () => {
+      buildingMarkersRef.current.forEach(m => m.remove());
+      buildingMarkersRef.current = [];
+    };
+  }, [mapReady, customBuilding, onBuildingDrag, onBuildingMove]);
+
+  // ------------------------------------------------------------------ #
+  // Vulnerable Population Zones Overlay
+  // ------------------------------------------------------------------ #
+  useEffect(() => {
+    const map = mapReady ? mapRef.current : null;
+    if (!map || !mapReady) return;
+
+    const srcId = 'vulnerable-zones-src';
+    const fillId = 'vulnerable-zones-fill';
+    const outlineId = 'vulnerable-zones-outline';
+
+    if (!showVulnerableZones) {
+      removeLayerIfPresent(map, fillId);
+      removeLayerIfPresent(map, outlineId);
+      removeSourceIfPresent(map, srcId);
+      // Remove any popup markers
+      vulnerableMarkersRef.current.forEach(m => m.remove());
+      vulnerableMarkersRef.current = [];
+      return;
+    }
+
+    // Synthetic vulnerable zone polygons (high HVI areas in Bhubaneswar)
+    const zones = [
+      { name: 'Khandagiri Slums', lat: 20.2566, lng: 85.7790, hvi: 0.89, pop: 18500, risk: 'Critical' },
+      { name: 'Old Town Dense Core', lat: 20.2390, lng: 85.8340, hvi: 0.82, pop: 24000, risk: 'Critical' },
+      { name: 'Rasulgarh Workers Colony', lat: 20.2970, lng: 85.8640, hvi: 0.76, pop: 11200, risk: 'High' },
+      { name: 'Dumduma Resettlement', lat: 20.2390, lng: 85.7890, hvi: 0.71, pop: 8300, risk: 'High' },
+      { name: 'Baramunda Transit Camp', lat: 20.2770, lng: 85.7950, hvi: 0.85, pop: 6800, risk: 'Critical' },
+      { name: 'Mancheswar Labor Quarter', lat: 20.3290, lng: 85.8560, hvi: 0.68, pop: 9500, risk: 'High' },
+    ];
+
+    const d = 0.003;
+    const features = zones.map(z => ({
+      type: 'Feature',
+      properties: {
+        zone_name: z.name,
+        hvi: z.hvi,
+        vulnerable_pop: z.pop,
+        risk_level: z.risk,
+        fill_color: z.risk === 'Critical' ? '#ef4444' : '#f97316',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [z.lng - d, z.lat - d],
+          [z.lng + d, z.lat - d],
+          [z.lng + d, z.lat + d],
+          [z.lng - d, z.lat + d],
+          [z.lng - d, z.lat - d],
+        ]]
+      }
+    }));
+
+    addOrUpdateSource(map, srcId, { type: 'FeatureCollection', features });
+
+    if (!map.getLayer(fillId)) {
+      addLayerIfMissing(map, {
+        id: fillId,
+        type: 'fill-extrusion',
+        source: srcId,
+        paint: {
+          'fill-extrusion-color': ['get', 'fill_color'],
+          'fill-extrusion-height': ['*', ['get', 'hvi'], 12],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.5,
+        }
+      });
+    }
+
+    if (!map.getLayer(outlineId)) {
+      addLayerIfMissing(map, {
+        id: outlineId,
+        type: 'line',
+        source: srcId,
+        paint: {
+          'line-color': ['get', 'fill_color'],
+          'line-width': 2,
+          'line-dasharray': [3, 2],
+          'line-opacity': 0.85,
+        }
+      });
+    }
+
+    // Popup on click
+    const handleVulClick = (e) => {
+      const feat = e.features?.[0];
+      if (!feat) return;
+      const p = feat.properties;
+      new maplibregl.Popup({ offset: 20, closeButton: false })
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div style="font-family:sans-serif;padding:4px;min-width:160px">
+            <div style="font-weight:800;color:${p.fill_color};margin-bottom:4px">⚠ ${p.zone_name}</div>
+            <div style="font-size:11px;color:#334155">HVI: <b>${Number(p.hvi).toFixed(2)}</b> · Risk: <b style='color:${p.fill_color}'>${p.risk_level}</b></div>
+            <div style="font-size:11px;color:#334155">Vulnerable Population: <b>${Number(p.vulnerable_pop).toLocaleString()}</b></div>
+            <div style="font-size:10px;color:#64748b;margin-top:4px">Priority cooling intervention zone</div>
+          </div>
+        `)
+        .addTo(map);
+    };
+
+    if (map.getLayer(fillId)) {
+      map.on('click', fillId, handleVulClick);
+      map.on('mouseenter', fillId, () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', fillId, () => { map.getCanvas().style.cursor = ''; });
+    }
+
+    return () => {
+      removeLayerIfPresent(map, fillId);
+      removeLayerIfPresent(map, outlineId);
+      removeSourceIfPresent(map, srcId);
+    };
+  }, [mapReady, showVulnerableZones]);
 
   // ------------------------------------------------------------------ #
   // Orbit control
@@ -1296,13 +1875,14 @@ export function DigitalTwinMap3D({
     if (!map) return;
     if (preset === 'city') {
       const bounds = boundsFromGeoJson(boundaryRef.current);
-      if (bounds) map.fitBounds(bounds, { padding: 50, pitch: 58, bearing: -22, duration: 1100 });
+      if (bounds) map.fitBounds(bounds, { padding: 40, pitch: 62, bearing: -22, duration: 1200 });
       return;
     }
     const target = selectedPoint || { lat: 20.2636, lng: 85.8275 };
-    const zoom = preset === 'street' ? 16 : 14;
-    const pitch = preset === 'street' ? 68 : 58;
-    map.flyTo({ center: [target.lng, target.lat], zoom, pitch, duration: 1100 });
+    const zoom = preset === 'street' ? 16.8 : preset === 'district' ? 14.8 : 13.5;
+    const pitch = preset === 'street' ? 78 : preset === 'district' ? 68 : 62;
+    const bearing = preset === 'street' ? -45 : preset === 'district' ? 35 : -22;
+    map.flyTo({ center: [target.lng, target.lat], zoom, pitch, bearing, duration: 1200 });
   };
 
   const toggleFullscreen = () => {
@@ -1324,23 +1904,26 @@ export function DigitalTwinMap3D({
     <div className="maplibre-shell">
       <div ref={containerRef} className="maplibre-container" />
 
-      {/* Top-left: compact title */}
-      <div className="maplibre-top-card">
-        <div className="maplibre-kicker"><Layers size={13} /> Bhubaneswar 3D Digital Twin</div>
-        <strong>OSM / GIS-based city</strong>
-        <span>{status.message}</span>
+      {/* Top-left: unified info panel (title + stats in flex column) */}
+      {showInfoPanel && (
+      <div className="map-overlay map-zone-top-left maplibre-info-panel">
+        <div className="maplibre-info-header">
+          <div className="maplibre-kicker"><Layers size={13} /> Bhubaneswar 3D Digital Twin</div>
+          <strong>OSM / GIS-based city</strong>
+          <span>{status.message}</span>
+        </div>
+        <div className="maplibre-stats-row" aria-label="Loaded 3D city layer counts">
+          <span className="maplibre-stat-badge"><Building2 size={12} /> {counts.buildings.toLocaleString()} bldgs</span>
+          <span className="maplibre-stat-badge"><Route size={12} /> {counts.roads.toLocaleString()} roads</span>
+          <span className="maplibre-stat-badge"><Trees size={12} /> {counts.trees.toLocaleString()} trees</span>
+          <span className="maplibre-stat-badge"><Waves size={12} /> {counts.water.toLocaleString()} water</span>
+        </div>
       </div>
+      )}
 
-      {/* Layer counts */}
-      <div className="maplibre-stats-card" aria-label="Loaded 3D city layer counts">
-        <span><Building2 size={13} /> {counts.buildings.toLocaleString()} buildings</span>
-        <span><Route size={13} /> {counts.roads.toLocaleString()} roads</span>
-        <span><Trees size={13} /> {counts.trees.toLocaleString()} OSM trees</span>
-        <span><Waves size={13} /> {counts.water.toLocaleString()} water</span>
-      </div>
-
-      {/* Camera presets */}
-      <div className="maplibre-camera" role="toolbar" aria-label="Camera controls">
+      {/* Top-right: Camera presets */}
+      {showCameraControls && (
+      <div className="map-overlay map-zone-top-right maplibre-camera" role="toolbar" aria-label="Camera controls">
         <button type="button" onClick={() => resetCamera('city')} title="City view — full Bhubaneswar" className="cam-btn active">
           <Home size={15} /> City
         </button>
@@ -1371,10 +1954,11 @@ export function DigitalTwinMap3D({
           {isFullscreen ? 'Exit' : 'Full'}
         </button>
       </div>
+      )}
 
-      {/* Scenario overlay legend */}
-      {overlayHasData && overlayLegend && (
-        <div className="maplibre-scenario-card" aria-label="Cell-level scenario overlay">
+      {/* Scenario overlay legend — zone: below top-right */}
+      {showScenarioLegend && overlayHasData && overlayLegend && (
+        <div className="map-overlay map-zone-scenario-legend maplibre-scenario-card" aria-label="Cell-level scenario overlay">
           <div className="maplibre-kicker" style={{ marginBottom: '5px' }}><MapPin size={13} /> Scenario cells</div>
           <strong title={scenarioOverlay.scenario} style={{ fontSize: '0.8rem', display: 'block', marginBottom: '7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {scenarioOverlay.scenario}
@@ -1399,61 +1983,39 @@ export function DigitalTwinMap3D({
         </div>
       )}
 
-      {/* Current prediction provenance box */}
-      {currentPrediction && (
-        <div className="maplibre-source-card" style={{
-          position: 'absolute',
-          bottom: '80px',
-          left: '20px',
-          zIndex: 998,
-          padding: '8px 12px',
-          borderRadius: '8px',
-          background: 'var(--bg-subtle)',
-          border: '1px solid var(--border-light)',
+      {/* Bottom-center: model + weather info (stacked compactly) */}
+      {showSourceCard && currentPrediction && (
+        <div className="map-overlay map-zone-bot-center maplibre-source-card" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '3px',
+          padding: '6px 12px',
           fontSize: '0.62rem',
-          color: 'var(--text-secondary)'
+          color: 'var(--text-secondary)',
+          whiteSpace: 'nowrap'
         }}>
-          <span style={{ fontWeight: 700, color: 'var(--text-main)', marginRight: '4px' }}>
-            MODELLED LST
-          </span>
-          <span>{currentPrediction.model_version ? 'V' + currentPrediction.model_version : 'V1'} · {currentPrediction.features_used} features</span>
-          <span style={{ fontSize: '0.54rem', color: 'var(--text-muted)' }}>{currentPrediction.pipeline_status}</span>
+          <div>
+            <span style={{ fontWeight: 700, color: 'var(--text-main)', marginRight: '4px' }}>MODELLED LST</span>
+            <span>{currentPrediction.model_version ? 'V' + currentPrediction.model_version : 'V1'} · {currentPrediction.features_used} features</span>
+          </div>
+          <div style={{ fontSize: '0.56rem', color: 'var(--text-muted)' }}>
+            Live weather: not used by V1 model · Click anywhere for location intelligence
+          </div>
         </div>
       )}
 
-      {/* Live weather context — NOT used by V1 model */}
-      {currentPrediction && (
-        <div className="maplibre-source-card" style={{
-          position: 'absolute',
-          bottom: '56px',
-          left: '20px',
-          zIndex: 998,
-          padding: '8px 12px',
-          borderRadius: '8px',
-          background: 'var(--bg-subtle)',
-          border: '1px solid var(--border-light)',
-          fontSize: '0.62rem',
-          color: 'var(--text-secondary)'
-        }}>
-          <span style={{ fontWeight: 700, color: 'var(--text-main)', marginRight: '4px' }}>
-            LIVE WEATHER CONTEXT
-          </span>
-          <span style={{ fontSize: '0.56rem', color: 'var(--text-muted)' }}>
-            — Not used by V1 model · OpenWeather air temperature displayed separately
-          </span>
+      {/* Bottom-left: Coordinates */}
+      {showCoords && cursorLngLat && (
+        <div className="map-overlay map-zone-bot-left map-coords-chip">{cursorLngLat[0].toFixed(5)}, {cursorLngLat[1].toFixed(5)}</div>
+      )}
+
+      {/* Bottom-left: Data source (above coords) */}
+      {showSourceCard && (
+        <div className="map-overlay map-zone-bot-left maplibre-source-card" style={{ bottom: 'calc(var(--map-safe-bottom) + 36px)' }}>
+          <Crosshair size={13} />
+          <span>{status.loading ? 'Loading…' : `${status.source}`}</span>
         </div>
       )}
-
-      {/* Coordinates chip */}
-      {cursorLngLat && (
-        <div className="map-coords-chip">{cursorLngLat[0].toFixed(5)}, {cursorLngLat[1].toFixed(5)}</div>
-      )}
-
-      {/* Data source footer */}
-      <div className="maplibre-source-card">
-        <Crosshair size={13} />
-        <span>{status.loading ? 'Loading…' : `${status.source} · Click anywhere for location intelligence`}</span>
-      </div>
     </div>
   );
 }
@@ -1487,28 +2049,6 @@ function showHoverPopup(map, popupRef, event, liveWeather) {
         <div style="color:#94a3b8">${Number(event.lngLat.lat).toFixed(5)}° N, ${Number(event.lngLat.lng).toFixed(5)}° E</div>
         ${tempLine}
         <div style="margin-top:4px;color:#0284c7;font-weight:700">Click for details →</div>
-      </div>`
-    )
-    .addTo(map);
-}
-
-function showCellPopup(map, popupRef, event, scenarioRef) {
-  const props = event.features?.[0]?.properties || {};
-  const scenarioName = scenarioRef.current?.scenario || '';
-  const delta = props.delta_lst;
-  const deltaColor = delta < 0 ? '#10b981' : delta > 0 ? '#dc2626' : '#94a3b8';
-  if (popupRef.current) popupRef.current.remove();
-  popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 12, maxWidth: '240px' })
-    .setLngLat(event.lngLat)
-    .setHTML(
-      `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.55">
-        <strong style="font-size:12.5px">Grid ${props.grid_id}</strong>
-        ${scenarioName ? `<div style="color:#94a3b8;font-size:11px">${scenarioName}</div>` : ''}
-        <div style="display:grid;grid-template-columns:auto auto;gap:2px 12px;margin-top:6px">
-          <span style="color:#94a3b8">Baseline LST</span><span style="font-weight:700;color:#dc2626">${fmtCellValue(props.baseline_lst)} °C</span>
-          <span style="color:#94a3b8">Scenario LST</span><span style="font-weight:700;color:#16a34a">${fmtCellValue(props.scenario_lst)} °C</span>
-          <span style="color:#94a3b8">Δ LST</span><span style="font-weight:700;color:${deltaColor}">${fmtCellValue(delta, true)} °C</span>
-        </div>
       </div>`
     )
     .addTo(map);
