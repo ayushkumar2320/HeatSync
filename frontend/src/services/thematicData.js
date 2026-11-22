@@ -355,6 +355,28 @@ export function buildAvailability(monitoring) {
   if (map.osm) {
     CITY_AVAILABILITY_KEYS.forEach((k) => { map[k] = true; });
   }
+
+  // --- Derived sub-layer keys ---
+  // The monitoring endpoint reports aggregated datasets (e.g. "aqi" for all
+  // pollutant rasters). Individual UI layer keys that share the same backing
+  // data need to be derived from the parent dataset.
+
+  // Individual pollutant rasters (PM25.tif, PM10.tif, etc.) live alongside
+  // AQI.tif under data/processed/aqi/rasters/.
+  if (map.aqi) {
+    ['pm25', 'pm10', 'no2', 'so2', 'o3', 'co'].forEach((k) => { map[k] = true; });
+  }
+
+  // "predicted_lst" comes from the trained model; the monitoring key is "model".
+  if (map.model) {
+    map.predicted_lst = true;
+  }
+
+  // "terrain_3d" uses DEM data; the monitoring key is "elevation".
+  if (map.elevation) {
+    map.terrain_3d = true;
+  }
+
   return map;
 }
 

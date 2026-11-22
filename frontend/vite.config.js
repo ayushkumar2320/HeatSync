@@ -21,8 +21,9 @@ export default defineConfig({
       },
     },
     hmr: {
-      host: 'localhost',
-      port: 5173,
+      // Do NOT hardcode host/port here — let Vite auto-detect from
+      // window.location so HMR works regardless of whether the dev server
+      // is accessed via localhost, 127.0.0.1, or a network IP.
     },
   },
 })

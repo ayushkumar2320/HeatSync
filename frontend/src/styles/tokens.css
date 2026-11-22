@@ -1,0 +1,255 @@
+/* ==========================================================================
+   HEATSYNC DESIGN TOKENS
+   Single source of truth for spacing, radius, elevation, and semantic color.
+   All one-off inline colors in JSX should reference these tokens instead.
+   ========================================================================== */
+
+:root {
+  /* -----------------------------------------------------------------------
+     SPACING SCALE
+     ----------------------------------------------------------------------- */
+  --hs-space-0:  0;
+  --hs-space-1:  4px;
+  --hs-space-2:  8px;
+  --hs-space-3:  12px;
+  --hs-space-4:  16px;
+  --hs-space-5:  20px;
+  --hs-space-6:  24px;
+  --hs-space-8:  32px;
+  --hs-space-10: 40px;
+  --hs-space-12: 48px;
+  --hs-space-16: 64px;
+  --hs-space-20: 80px;
+  --hs-space-24: 96px;
+  --hs-space-32: 128px;
+
+  /* -----------------------------------------------------------------------
+     BORDER RADIUS
+     ----------------------------------------------------------------------- */
+  --hs-radius-xs:   4px;
+  --hs-radius-sm:   6px;
+  --hs-radius-md:   10px;
+  --hs-radius-lg:   14px;
+  --hs-radius-xl:   18px;
+  --hs-radius-2xl:  24px;
+  --hs-radius-full: 9999px;
+
+  /* -----------------------------------------------------------------------
+     ELEVATION / SHADOWS  (dark-first)
+     ----------------------------------------------------------------------- */
+  --hs-shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.35);
+  --hs-shadow-sm:   0 2px 6px rgba(0, 0, 0, 0.4);
+  --hs-shadow-md:   0 4px 16px rgba(0, 0, 0, 0.45);
+  --hs-shadow-lg:   0 8px 32px rgba(0, 0, 0, 0.5);
+  --hs-shadow-xl:   0 16px 48px rgba(0, 0, 0, 0.6);
+  --hs-shadow-glow: 0 0 24px var(--hs-cyan-glow);
+
+  /* -----------------------------------------------------------------------
+     SEMANTIC COLORS — DARK THEME (default)
+     ----------------------------------------------------------------------- */
+
+  /* --- Backgrounds --- */
+  --hs-bg-void:      #04060d;
+  --hs-bg-deep:      #080c18;
+  --hs-bg-primary:   #0c1222;
+  --hs-bg-secondary: #111a2e;
+  --hs-bg-tertiary:  #162036;
+  --hs-bg-elevated:  #1a2540;
+  --hs-bg-surface:   rgba(17, 26, 46, 0.85);
+  --hs-bg-glass:     rgba(12, 18, 34, 0.72);
+  --hs-bg-hover:     rgba(56, 189, 248, 0.06);
+
+  /* --- Borders --- */
+  --hs-border-subtle:  rgba(255, 255, 255, 0.06);
+  --hs-border-default: rgba(255, 255, 255, 0.1);
+  --hs-border-strong:  rgba(255, 255, 255, 0.18);
+  --hs-border-accent:  rgba(0, 217, 255, 0.3);
+
+  /* --- Text --- */
+  --hs-text-primary:   #f0f4f8;
+  --hs-text-secondary: #94a3b8;
+  --hs-text-tertiary:  #64748b;
+  --hs-text-muted:     #475569;
+  --hs-text-inverse:   #0c1222;
+
+  /* --- Accent / Brand --- */
+  --hs-cyan:     #00d9ff;
+  --hs-cyan-dim: rgba(0, 217, 255, 0.12);
+  --hs-cyan-glow: rgba(0, 217, 255, 0.22);
+
+  --hs-purple:     #a78bfa;
+  --hs-purple-dim: rgba(167, 139, 250, 0.12);
+  --hs-purple-glow: rgba(167, 139, 250, 0.22);
+
+  /* =====================================================================
+     SEMANTIC DOMAIN COLORS
+     Used consistently across all components for data-driven UI.
+     ===================================================================== */
+
+  /* --- Heat (LST / temperature) --- */
+  --hs-heat:      #ef4444;
+  --hs-heat-dim:  rgba(239, 68, 68, 0.12);
+  --hs-heat-glow: rgba(239, 68, 68, 0.22);
+  --hs-heat-light: #fca5a5;
+  --hs-heat-bg:   rgba(239, 68, 68, 0.08);
+
+  /* --- Cool (cooling / water influence) --- */
+  --hs-cool:      #06b6d4;
+  --hs-cool-dim:  rgba(6, 182, 212, 0.12);
+  --hs-cool-glow: rgba(6, 182, 212, 0.22);
+  --hs-cool-light: #a5f3fc;
+  --hs-cool-bg:   rgba(6, 182, 212, 0.08);
+
+  /* --- Vegetation (NDVI / green cover) --- */
+  --hs-vegetation:      #22c55e;
+  --hs-vegetation-dim:  rgba(34, 197, 94, 0.12);
+  --hs-vegetation-glow: rgba(34, 197, 94, 0.22);
+  --hs-vegetation-light: #86efac;
+  --hs-vegetation-bg:   rgba(34, 197, 94, 0.08);
+
+  /* --- Water --- */
+  --hs-water:      #3b82f6;
+  --hs-water-dim:  rgba(59, 130, 246, 0.12);
+  --hs-water-glow: rgba(59, 130, 246, 0.22);
+  --hs-water-light: #93c5fd;
+  --hs-water-bg:   rgba(59, 130, 246, 0.08);
+
+  /* --- Infrastructure (roads / buildings) --- */
+  --hs-infrastructure:      #f97316;
+  --hs-infrastructure-dim:  rgba(249, 115, 22, 0.12);
+  --hs-infrastructure-glow: rgba(249, 115, 22, 0.22);
+  --hs-infrastructure-light: #fdba74;
+  --hs-infrastructure-bg:   rgba(249, 119, 22, 0.08);
+
+  /* --- Warning --- */
+  --hs-warning:      #f59e0b;
+  --hs-warning-dim:  rgba(245, 158, 11, 0.12);
+  --hs-warning-glow: rgba(245, 158, 11, 0.22);
+  --hs-warning-light: #fde68a;
+  --hs-warning-bg:   rgba(245, 158, 11, 0.08);
+
+  /* --- Critical --- */
+  --hs-critical:      #dc2626;
+  --hs-critical-dim:  rgba(220, 38, 38, 0.12);
+  --hs-critical-glow: rgba(220, 38, 38, 0.22);
+  --hs-critical-light: #fca5a5;
+  --hs-critical-bg:   rgba(220, 38, 38, 0.08);
+
+  /* --- Success --- */
+  --hs-success:      #16a34a;
+  --hs-success-dim:  rgba(22, 163, 74, 0.12);
+  --hs-success-glow: rgba(22, 163, 74, 0.22);
+  --hs-success-light: #86efac;
+  --hs-success-bg:   rgba(22, 163, 74, 0.08);
+
+  /* --- Neutral --- */
+  --hs-neutral:      #94a3b8;
+  --hs-neutral-dim:  rgba(148, 163, 184, 0.12);
+  --hs-neutral-glow: rgba(148, 163, 184, 0.18);
+  --hs-neutral-light: #cbd5e1;
+  --hs-neutral-bg:   rgba(148, 163, 184, 0.06);
+
+  /* --- Heat scale (gradient stops for maps / charts) --- */
+  --hs-heat-1: #1e3a5f;
+  --hs-heat-2: #2563eb;
+  --hs-heat-3: #22c55e;
+  --hs-heat-4: #eab308;
+  --hs-heat-5: #f97316;
+  --hs-heat-6: #ef4444;
+  --hs-heat-7: #991b1b;
+
+  /* -----------------------------------------------------------------------
+     LAYOUT CONSTANTS
+     ----------------------------------------------------------------------- */
+  --hs-nav-width:         72px;
+  --hs-nav-width-expanded: 240px;
+  --hs-header-height:     56px;
+  --hs-status-height:     36px;
+
+  /* -----------------------------------------------------------------------
+     Z-INDEX SCALE
+     ----------------------------------------------------------------------- */
+  --hs-z-base:    0;
+  --hs-z-float:   10;
+  --hs-z-nav:     100;
+  --hs-z-overlay: 200;
+  --hs-z-modal:   300;
+  --hs-z-toast:   400;
+}
+
+/* ==========================================================================
+   LIGHT THEME OVERRIDES
+   ========================================================================== */
+[data-theme='light'] {
+  --hs-bg-void:      #f8fafc;
+  --hs-bg-deep:      #f1f5f9;
+  --hs-bg-primary:   #ffffff;
+  --hs-bg-secondary: #f8fafc;
+  --hs-bg-tertiary:  #f1f5f9;
+  --hs-bg-elevated:  #ffffff;
+  --hs-bg-surface:   rgba(255, 255, 255, 0.92);
+  --hs-bg-glass:     rgba(255, 255, 255, 0.8);
+  --hs-bg-hover:     rgba(0, 0, 0, 0.03);
+
+  --hs-border-subtle:  rgba(0, 0, 0, 0.06);
+  --hs-border-default: rgba(0, 0, 0, 0.1);
+  --hs-border-strong:  rgba(0, 0, 0, 0.18);
+  --hs-border-accent:  rgba(0, 120, 200, 0.3);
+
+  --hs-text-primary:   #0f172a;
+  --hs-text-secondary: #475569;
+  --hs-text-tertiary:  #94a3b8;
+  --hs-text-muted:     #cbd5e1;
+  --hs-text-inverse:   #f0f4f8;
+
+  --hs-cyan:     #0284c7;
+  --hs-cyan-dim: rgba(2, 132, 199, 0.08);
+  --hs-cyan-glow: rgba(2, 132, 199, 0.12);
+
+  --hs-purple:     #7c3aed;
+  --hs-purple-dim: rgba(124, 58, 237, 0.08);
+  --hs-purple-glow: rgba(124, 58, 237, 0.12);
+
+  /* Domain colors — light mode */
+  --hs-heat:      #dc2626;
+  --hs-heat-dim:  rgba(220, 38, 38, 0.08);
+  --hs-heat-bg:   rgba(220, 38, 38, 0.06);
+
+  --hs-cool:      #0891b2;
+  --hs-cool-dim:  rgba(8, 145, 178, 0.08);
+  --hs-cool-bg:   rgba(8, 145, 178, 0.06);
+
+  --hs-vegetation:      #16a34a;
+  --hs-vegetation-dim:  rgba(22, 163, 74, 0.08);
+  --hs-vegetation-bg:   rgba(22, 163, 74, 0.06);
+
+  --hs-water:      #2563eb;
+  --hs-water-dim:  rgba(37, 99, 235, 0.08);
+  --hs-water-bg:   rgba(37, 99, 235, 0.06);
+
+  --hs-infrastructure:      #ea580c;
+  --hs-infrastructure-dim:  rgba(234, 88, 12, 0.08);
+  --hs-infrastructure-bg:   rgba(234, 88, 12, 0.06);
+
+  --hs-warning:      #d97706;
+  --hs-warning-dim:  rgba(217, 119, 6, 0.08);
+  --hs-warning-bg:   rgba(217, 119, 6, 0.06);
+
+  --hs-critical:      #b91c1c;
+  --hs-critical-dim:  rgba(185, 28, 28, 0.08);
+  --hs-critical-bg:   rgba(185, 28, 28, 0.06);
+
+  --hs-success:      #15803d;
+  --hs-success-dim:  rgba(21, 128, 61, 0.08);
+  --hs-success-bg:   rgba(21, 128, 61, 0.06);
+
+  --hs-neutral:      #64748b;
+  --hs-neutral-dim:  rgba(100, 116, 139, 0.08);
+
+  --hs-shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.05);
+  --hs-shadow-sm:   0 2px 6px rgba(0, 0, 0, 0.06);
+  --hs-shadow-md:   0 4px 16px rgba(0, 0, 0, 0.08);
+  --hs-shadow-lg:   0 8px 32px rgba(0, 0, 0, 0.1);
+  --hs-shadow-xl:   0 16px 48px rgba(0, 0, 0, 0.12);
+  --hs-shadow-glow: 0 0 24px rgba(2, 132, 199, 0.08);
+}

@@ -296,6 +296,33 @@ class ScenarioConfig:
                 "CoolingDistanceIndex": ("mul", 1.10),
             },
         ),
+        Scenario(
+            name="decrease_traffic_30",
+            description="Reduce vehicle traffic by 30% (cooler roads, less combustion heat)",
+            perturbations={
+                "ImperviousSurfaceRatio": ("mul", 0.95),
+                "LandCover_BuiltupPct": ("mul", 0.97),
+                "HeatVulnerabilityIndex": ("add", -0.04),
+                "GreenToBuiltRatio": ("mul", 1.05),
+            },
+        ),
+        Scenario(
+            name="mixed_intervention",
+            description="Combined: +15% green cover + cool roofs + 20% traffic reduction",
+            perturbations={
+                "GreenCover": ("add", 15.0),
+                "MeanNDVI": ("add", 0.09),
+                "MaxNDVI": ("add", 0.05),
+                "TreeCount": ("add", 15.0),
+                "VegetationDensity": ("add", 8.0),
+                "VegetationCoolingIndex": ("mul", 1.20),
+                "LandCover_BuiltupPct": ("mul", 0.88),
+                "ImperviousSurfaceRatio": ("mul", 0.88),
+                "GreenToBuiltRatio": ("mul", 1.30),
+                "HeatVulnerabilityIndex": ("add", -0.08),
+                "BuildingCoveragePct": ("mul", 0.92),
+            },
+        ),
     ])
 
 

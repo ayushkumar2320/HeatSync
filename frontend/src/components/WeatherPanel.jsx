@@ -5,15 +5,6 @@ import {
 } from 'lucide-react';
 import { useLiveData } from '../context/LiveDataContext';
 
-const fmtTime = (iso) => {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  } catch {
-    return '—';
-  }
-};
-
 // OpenWeather condition text from the backend; a numeric code is only a fallback.
 const conditionLabel = (description, code) => {
   if (description) return description;
@@ -58,14 +49,14 @@ export const WeatherPanel = ({ compact = false, onClose = null, initial = null }
   const hasValue = (v) => v !== null && v !== undefined && !Number.isNaN(v);
 
   const metrics = [
-    { label: 'Temperature', value: hasValue(weather.temperature) ? `${weather.temperature} °C` : null, icon: ThermometerSun, color: '#dc2626' },
-    { label: 'Feels Like', value: hasValue(weather.feelsLike) ? `${weather.feelsLike} °C` : null, icon: Activity, color: '#b91c1c' },
-    { label: 'Humidity', value: hasValue(weather.humidity) ? `${weather.humidity} %` : null, icon: Droplets, color: '#0284c7' },
-    { label: 'Wind', value: hasValue(weather.windSpeed) ? `${weather.windSpeed} km/h` : null, icon: Wind, color: '#7c3aed' },
-    { label: 'Pressure', value: hasValue(weather.pressure) ? `${weather.pressure} hPa` : null, icon: Gauge, color: '#64748b' },
-    { label: 'Precipitation', value: hasValue(weather.precipitation) ? `${weather.precipitation} mm` : null, icon: CloudRain, color: '#0ea5e9' },
-    { label: 'Cloud Cover', value: hasValue(weather.cloudCover) ? `${weather.cloudCover} %` : null, icon: CloudSun, color: '#475569' },
-    { label: 'Visibility', value: hasValue(weather.visibility) ? `${(weather.visibility / 1000).toFixed(1)} km` : null, icon: Sun, color: '#d97706' },
+    { label: 'Temperature', value: hasValue(weather.temperature) ? `${weather.temperature} °C` : null, icon: ThermometerSun, color: 'var(--hs-heat)' },
+    { label: 'Feels Like', value: hasValue(weather.feelsLike) ? `${weather.feelsLike} °C` : null, icon: Activity, color: 'var(--hs-heat)' },
+    { label: 'Humidity', value: hasValue(weather.humidity) ? `${weather.humidity} %` : null, icon: Droplets, color: 'var(--hs-water)' },
+    { label: 'Wind', value: hasValue(weather.windSpeed) ? `${weather.windSpeed} km/h` : null, icon: Wind, color: 'var(--hs-purple)' },
+    { label: 'Pressure', value: hasValue(weather.pressure) ? `${weather.pressure} hPa` : null, icon: Gauge, color: 'var(--hs-text-tertiary)' },
+    { label: 'Precipitation', value: hasValue(weather.precipitation) ? `${weather.precipitation} mm` : null, icon: CloudRain, color: 'var(--hs-cool)' },
+    { label: 'Cloud Cover', value: hasValue(weather.cloudCover) ? `${weather.cloudCover} %` : null, icon: CloudSun, color: 'var(--hs-text-secondary)' },
+    { label: 'Visibility', value: hasValue(weather.visibility) ? `${(weather.visibility / 1000).toFixed(1)} km` : null, icon: Sun, color: 'var(--hs-warning)' },
   ];
 
   return (
@@ -76,11 +67,11 @@ export const WeatherPanel = ({ compact = false, onClose = null, initial = null }
         {isLive ? (
           <span className="wp-fresh live">LIVE</span>
         ) : isStale ? (
-          <span className="wp-fresh" style={{ color: '#d97706' }}>STALE</span>
+          <span className="wp-fresh" style={{ color: 'var(--hs-warning)' }}>STALE</span>
         ) : isCached ? (
-          <span className="wp-fresh" style={{ color: '#94a3b8' }}>CACHED</span>
+          <span className="wp-fresh" style={{ color: 'var(--hs-text-tertiary)' }}>CACHED</span>
         ) : (
-          <span className="wp-fresh" style={{ color: '#94a3b8' }}>UPDATED</span>
+          <span className="wp-fresh" style={{ color: 'var(--hs-text-tertiary)' }}>UPDATED</span>
         )}
         {onClose && <button className="wp-close" onClick={onClose} aria-label="Close weather"><X size={14} /></button>}
       </div>

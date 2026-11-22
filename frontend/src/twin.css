@@ -738,13 +738,15 @@ button.ci-highlight:hover { border-color: var(--border-accent); }
 
 /* --- Map camera controls -------------------------------------------------- */
 .maplibre-camera {
-  position: absolute;
-  z-index: 2;
-  right: 14px;
-  top: 14px;
+  z-index: var(--z-float);
   display: flex;
   flex-direction: column;
   gap: 5px;
+  pointer-events: none;
+}
+
+.maplibre-camera .cam-btn {
+  pointer-events: auto;
 }
 
 .cam-btn {
@@ -866,9 +868,6 @@ button.ci-highlight:hover { border-color: var(--border-accent); }
 /* --- Responsive additions ------------------------------------------------- */
 @media (max-width: 1440px) {
   .maplibre-camera {
-    top: auto;
-    bottom: 14px;
-    right: 14px;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -891,12 +890,12 @@ button.ci-highlight:hover { border-color: var(--border-accent); }
   .analytics-head { padding: 12px; }
   .an-honesty { text-align: left; }
   .loc-panel-wrap { left: 10px; right: 10px; bottom: 10px; width: auto; }
-  .maplibre-camera { bottom: 10px; right: 10px; max-width: 210px; gap: 4px; }
+  .maplibre-camera { max-width: 210px; gap: 4px; }
   .cam-btn { padding: 5px 8px; font-size: 0.6rem; }
   .map-overlay-stack { top: 10px; }
 }
 
-/* ==========================================================================
+/* ========================================================================== */
 
 /* ==========================================================================
    SYSTEM HEALTH REDESIGN (Phase 4 / 22) — new components

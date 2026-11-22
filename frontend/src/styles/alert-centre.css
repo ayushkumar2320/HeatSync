@@ -1,0 +1,502 @@
+/* ==========================================================================
+   ALERT CENTRE & DISASTER MANAGEMENT STYLES
+   Refractive glass styling, tier tokens & dual-mode responsive layout.
+   ========================================================================== */
+
+.ac-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-6);
+  padding: var(--hs-space-6);
+  max-width: 1440px;
+  margin: 0 auto;
+  min-height: calc(100vh - 80px);
+  color: var(--hs-text-primary);
+}
+
+/* Header */
+.ac-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--hs-space-4);
+  background: var(--hs-bg-glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--hs-border-subtle);
+  border-radius: var(--hs-radius-xl);
+  padding: var(--hs-space-6);
+  box-shadow: var(--hs-shadow-md);
+}
+
+.ac-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-1);
+}
+
+.ac-badge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-2);
+  margin-bottom: var(--hs-space-1);
+}
+
+.ac-subhead-pill {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 10px;
+  border-radius: var(--hs-radius-full);
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--hs-cyan);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.ac-title {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: var(--hs-font-display, sans-serif);
+  color: #fff;
+  margin: 0;
+}
+
+.ac-desc {
+  font-size: 13px;
+  color: var(--hs-text-secondary);
+  max-width: 650px;
+  margin: 0;
+}
+
+.ac-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-3);
+  flex-wrap: wrap;
+}
+
+/* Mode Switcher Toggle */
+.ac-mode-switch {
+  display: flex;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  border-radius: var(--hs-radius-full);
+  border: 1px solid var(--hs-border-subtle);
+}
+
+.ac-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--hs-radius-full);
+  border: none;
+  background: transparent;
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ac-mode-btn.active {
+  background: var(--hs-cyan);
+  color: #04060d;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.ac-btn-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--hs-radius-md);
+  border: 1px solid var(--hs-border-subtle);
+  background: var(--hs-bg-secondary);
+  color: var(--hs-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ac-btn-icon:hover {
+  background: var(--hs-bg-hover);
+  border-color: var(--hs-cyan);
+}
+
+/* Hero Alert Card */
+.ac-hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--hs-radius-xl);
+  padding: var(--hs-space-6);
+  border: 1px solid;
+  backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-5);
+  box-shadow: var(--hs-shadow-lg);
+  transition: border-color 0.3s ease;
+}
+
+.ac-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--hs-space-3);
+}
+
+.ac-tier-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--hs-radius-full);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ac-pulsing-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  animation: ac-pulse 1.8s infinite ease-in-out;
+}
+
+@keyframes ac-pulse {
+  0% { transform: scale(0.9); opacity: 0.8; box-shadow: 0 0 0 0 rgba(255,255,255,0.7); }
+  70% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.ac-hero-headline {
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  margin: var(--hs-space-2) 0 0 0;
+  letter-spacing: -0.01em;
+}
+
+/* Compound Hazard Pill */
+.ac-compound-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: var(--hs-radius-lg);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ac-compound-icon {
+  flex-shrink: 0;
+  color: #ef4444;
+}
+
+/* Metrics Quick Grid */
+.ac-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--hs-space-3);
+}
+
+.ac-metric-tile {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--hs-radius-lg);
+  padding: var(--hs-space-3) var(--hs-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ac-metric-tile-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--hs-text-muted);
+}
+
+.ac-metric-tile-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  font-family: var(--hs-font-mono, monospace);
+}
+
+.ac-metric-tile-sub {
+  font-size: 11px;
+  color: var(--hs-text-secondary);
+}
+
+/* Main Content Grid */
+.ac-content-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--hs-space-6);
+}
+
+@media (min-width: 992px) {
+  .ac-content-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* Glass Card Box */
+.ac-card {
+  background: var(--hs-bg-glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--hs-border-subtle);
+  border-radius: var(--hs-radius-xl);
+  padding: var(--hs-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-4);
+  box-shadow: var(--hs-shadow-md);
+}
+
+.ac-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hs-border-subtle);
+  padding-bottom: var(--hs-space-3);
+}
+
+.ac-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+/* 5 Action Steps */
+.ac-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-3);
+}
+
+.ac-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--hs-bg-secondary);
+  border: 1px solid var(--hs-border-subtle);
+  border-radius: var(--hs-radius-md);
+  padding: 12px 16px;
+  transition: transform 0.15s ease;
+}
+
+.ac-step-item:hover {
+  transform: translateX(4px);
+  border-color: var(--hs-cyan);
+}
+
+.ac-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--hs-cyan);
+  color: #04060d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.ac-step-text {
+  font-size: 13.5px;
+  color: var(--hs-text-primary);
+  line-height: 1.45;
+}
+
+/* Vulnerable Groups */
+.ac-vuln-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--hs-space-3);
+}
+
+.ac-vuln-card {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--hs-radius-md);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: #fde68a;
+  font-weight: 500;
+}
+
+/* Emergency Contact Strip */
+.ac-contacts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--hs-space-3);
+}
+
+.ac-contact-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--hs-border-subtle);
+  border-radius: var(--hs-radius-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ac-contact-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--hs-cyan);
+  font-family: var(--hs-font-mono, monospace);
+}
+
+.ac-contact-label {
+  font-size: 11px;
+  color: var(--hs-text-secondary);
+}
+
+/* Technical Diagnostics Rows */
+.ac-diag-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ac-diag-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ac-diag-label {
+  font-size: 13px;
+  color: var(--hs-text-secondary);
+}
+
+.ac-diag-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  font-family: var(--hs-font-mono, monospace);
+}
+
+/* Technical Matrix Cards */
+.ac-matrix-card {
+  background: rgba(17, 26, 46, 0.6);
+  border-left: 4px solid var(--hs-cyan);
+  border-radius: 0 var(--hs-radius-md) var(--hs-radius-md) 0;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ac-matrix-status {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--hs-cyan);
+  text-transform: uppercase;
+}
+
+.ac-matrix-action {
+  font-size: 12px;
+  color: var(--hs-text-secondary);
+  line-height: 1.45;
+}
+
+/* Cooling Shelters Section */
+.ac-shelters-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-3);
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ac-shelter-card {
+  background: var(--hs-bg-secondary);
+  border: 1px solid var(--hs-border-subtle);
+  border-radius: var(--hs-radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.ac-shelter-card:hover {
+  border-color: var(--hs-cyan);
+  background: var(--hs-bg-elevated);
+}
+
+.ac-shelter-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ac-shelter-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.ac-shelter-dist {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--hs-radius-full);
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--hs-cyan);
+}
+
+.ac-shelter-amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ac-amenity-tag {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--hs-text-secondary);
+}
+
+/* CAP XML Code Box */
+.ac-xml-box {
+  background: #030712;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--hs-radius-md);
+  padding: 14px;
+  font-family: var(--hs-font-mono, monospace);
+  font-size: 11.5px;
+  color: #38bdf8;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

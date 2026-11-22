@@ -13,23 +13,11 @@ from backend.api.deps import get_serving
 from backend.config.settings import Settings, get_settings
 from backend.schemas import PredictionResult, PredictRequest
 from backend.services.serving import ServingContext
+from backend.utils.common import heat_class
 
 log = logging.getLogger("backend.prediction")
 
 router = APIRouter(prefix="/api/prediction", tags=["prediction"])
-
-# Project heat-class temperature breaks (gis-engine HeatClassConfig.fixed_breaks_c)
-# used ONLY to label predictions with a class - visualization thresholds.
-UHI_CLASS_BREAKS = [("Very Cool", 20.0), ("Cool", 25.0), ("Moderate", 30.0),
-                    ("Warm", 35.0), ("Hot", 40.0)]
-
-
-def uhi_class(celsius: float) -> str:
-    """Classify a predicted LST using the project's fixed heat breaks."""
-    for label, threshold in UHI_CLASS_BREAKS:
-        if celsius < threshold:
-            return label
-    return "Very Hot"
 
 
 @router.get("/model")
@@ -110,7 +98,7 @@ def current_heat(serving: ServingContext = Depends(get_serving)) -> JSONResponse
         feature_age = grid.get("feature_age", {})
         predicted = {
             "predicted_lst_c": prediction_lst,
-            "uhi_class": uhi_class(prediction_lst),
+            "uhi_class": heat_class(prediction_lst),
             "source": prediction.get("source", "XGBoost"),
             "model_version": prediction.get("model_version"),
             "features_used": prediction.get("features_used", len(serving.features)),
@@ -412,7 +400,7 @@ def predict(payload: PredictRequest,
             PredictionResult(
                 grid_id=grid_ids[i] if i < len(grid_ids) else None,
                 predicted_lst_c=round(p, 3),
-                uhi_class=uhi_class(p),
+                uhi_class=heat_class(p),
             ).model_dump()
             for i, p in enumerate(preds)
         ],

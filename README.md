@@ -155,6 +155,10 @@ docker compose up -d --build   # backend + optional PostGIS (docker-compose.yml 
 | `POST /api/simulation/run` | run a named or custom scenario live |
 | `GET /api/explainability/importance` | global SHAP importance |
 | `GET /api/dashboard/summary` | aggregated dashboard payload |
+| `GET /api/alerts/active` | live heatwave warning payload with dual-mode citizen & analyst guidance |
+| `GET /api/alerts/cap.xml` | OASIS / ITU-T CAP v1.2 XML emergency feed for NDMA / OSDMA |
+| `GET /api/alerts/shelters` | verified public cooling shelters, misting stations & hospital triage units |
+| `GET /api/alerts/summary` | compact alert tier, WBGT, and compound hazard status for UI headers |
 
 Full reference: [docs/api.md](docs/api.md).
 
@@ -167,6 +171,29 @@ Full reference: [docs/api.md](docs/api.md).
 - **HeatSync microclimate** — tree canopy cooling (0.16 °C / 10%), cool roofs
   (0.28 °C / 10%), shade canopies, traffic rerouting (up to −85 AQI points),
   Demographic Equity scoring and 95% Kriging uncertainty bounds.
+
+## 🚨 Civil Protection Alert Centre & Early Warnings (HeatX Integration)
+
+A real-time civil protection and biophysical thermal early-warning system integrated into HeatSync, bridging raw satellite predictions with emergency action plans:
+
+- **Biophysical Thermal Strain Indices**:
+  - **Stull (2011) Wet-Bulb Temperature ($T_{\text{wb}}$)** and Natural Wet-Bulb ($T_{\text{nwb}}$)
+  - **Outdoor Composite WBGT** (ACGIH / ISO 7243 energy-balance black-globe model)
+  - **NWS Rothfusz Heat Index** (Apparent 'feels-like' temperature)
+  - **COST 730 Simplified UTCI Proxy** (Universal Thermal Climate Index)
+- **5-Tier Heat Impact Warning Tiers**: Aligned with IMD / NDMA heatwave frameworks:
+  - 🟢 **Normal / Low** (`#27AE60`) — Routine monitoring; maintain baseline public hydration.
+  - 🟡 **Elevated / Caution** (`#F1C40F`) — Caution advised for manual outdoor workers; hydration breaks.
+  - 🟠 **High / Amber** (`#E67E22`) — District Heat Action Plan activation; mandatory shaded breaks.
+  - 🔴 **Very High / Danger** (`#C0392B`) — Severe heatwave; halt non-essential afternoon outdoor work.
+  - 🟣 **Extreme Danger** (`#7D3C98`) — Red alert; hospital heatstroke room mobilization.
+- **Compound Multi-Hazard Engine**: Automatically flags compound heatwave + particulate pollution crises when $\text{WBGT} \ge 29.4^\circ\text{C}$ and $\text{PM}_{2.5} \ge 60\,\mu\text{g/m}^3$ (synergistic cardiovascular & respiratory collapse hazard).
+- **Dual-Mode Citizen vs. Analyst Guidance**:
+  - **Citizen Layman View**: Plain-language danger assessment, 5 actionable protection guidelines, vulnerable demographics, and emergency medical hotlines (108, BMC 1929, OSDMA 1070).
+  - **Analyst Technical View**: Full biophysical diagnostic matrix, DISCOM electricity grid surge load %, hospital surge triage protocols (Code Green/Yellow/Orange/Red), and NDMA 2024 compliance metadata.
+- **OASIS / ITU-T CAP v1.2 Protocol Feed**: Live XML feed compliant with ITU-T Recommendation X.1303 for automated syndication to NDMA Sachak, OSDMA, and IMD early warning networks (`/api/alerts/cap.xml`).
+- **Cooling Shelters & Heat-Safe Spots Directory**: Geospatial database of 8 verified Bhubaneswar cooling shelters, misting transit hubs, and hospital heatstroke triage units (`/api/alerts/shelters`).
+- **2D / 3D "Lite" Performance Mode Toggle**: Instant performance switch to run on lightweight 2D Leaflet rendering on memory-constrained (8 GB RAM) machines while keeping 3D WebGL optional.
 
 ## 📚 Documentation
 

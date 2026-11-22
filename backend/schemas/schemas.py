@@ -122,3 +122,77 @@ class ScenarioInfo(BaseModel):
     name: str
     description: str
     perturbations: dict[str, list[str | float]]
+
+
+# ---------------------------------------------------------------------- #
+# Thermal Routing
+# ---------------------------------------------------------------------- #
+class RouteMetrics(BaseModel):
+    """Metrics for a single route option."""
+
+    distance_m: float = Field(description="Total distance in metres")
+    distance_km: float = Field(description="Total distance in kilometres")
+    time_min: float = Field(description="Estimated walking time in minutes")
+    avg_lst_c: float | None = Field(
+        default=None,
+        description="Average predicted land surface temperature along route (°C)",
+    )
+    max_lst_c: float | None = Field(
+        default=None,
+        description="Maximum predicted LST along route (°C)",
+    )
+    thermal_exposure: float | None = Field(
+        default=None,
+        description="Estimated thermal exposure (avg LST along path, °C)",
+    )
+    shade: float | None = Field(
+        default=None,
+        description="Average tree density (shade proxy) along route",
+    )
+    vegetation: float | None = Field(
+        default=None,
+        description="Average NDVI (vegetation index) along route",
+    )
+    aqi: float | None = Field(
+        default=None,
+        description="Average air quality index along route",
+    )
+    n_cells: int = Field(description="Number of grid cells in the route path")
+    geometry: dict = Field(description="GeoJSON LineString geometry")
+
+
+class RouteWeights(BaseModel):
+    """Configurable weights for the route cost formula."""
+
+    distance: float = 1.0
+    heat: float = 0.0
+    aqi: float = 0.0
+    shade: float = 0.0
+    vegetation: float = 0.0
+
+
+class RouteMethodology(BaseModel):
+    """Transparent description of how routes are calculated."""
+
+    formula: str
+    weights_used: RouteWeights
+    grid_resolution_m: int
+    algorithm: str
+    walking_speed_kmh: float
+    departure_time_note: str
+    limitations: list[str]
+
+
+class ThermalRouteResponse(BaseModel):
+    """Full response from the thermal routing endpoint."""
+
+    available: bool
+    fastest: RouteMetrics | None = None
+    coolest: RouteMetrics | None = None
+    balanced: RouteMetrics | None = None
+    departure_time: str | None = None
+    weights: RouteWeights | None = None
+    methodology: RouteMethodology | None = None
+    note: str | None = None
+    speed_kmh: float | None = None
+    message: str | None = None

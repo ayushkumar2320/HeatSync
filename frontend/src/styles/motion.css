@@ -1,0 +1,126 @@
+/* ==========================================================================
+   HEATSYNC MOTION
+   Transition timing, duration, easing + keyframe animations
+   ========================================================================== */
+
+/* --- Transition Tokens ------------------------------------------------ */
+:root {
+  /* Durations */
+  --hs-duration-instant: 0ms;
+  --hs-duration-fast:    120ms;
+  --hs-duration-normal:  200ms;
+  --hs-duration-slow:    350ms;
+  --hs-duration-slower:  500ms;
+
+  /* Easing curves */
+  --hs-ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --hs-ease-in:       cubic-bezier(0.7, 0, 0.84, 0);
+  --hs-ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+  --hs-ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --hs-ease-snap:     cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* Composite transitions */
+  --hs-transition-fast:   var(--hs-duration-fast) var(--hs-ease-out);
+  --hs-transition-normal: var(--hs-duration-normal) var(--hs-ease-out);
+  --hs-transition-slow:   var(--hs-duration-slow) var(--hs-ease-out);
+  --hs-transition-spring: var(--hs-duration-slower) var(--hs-ease-spring);
+}
+
+/* --- Keyframe Animations ---------------------------------------------- */
+
+/* Pulse — status indicators */
+@keyframes hs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Pulse glow — live connection dot */
+@keyframes hs-pulse-glow {
+  0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+  70%  { transform: scale(1);    box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+/* Fade in — element entrance */
+@keyframes hs-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Slide up — panels and cards */
+@keyframes hs-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Slide down — dropdowns */
+@keyframes hs-slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Scale in — modals and popovers */
+@keyframes hs-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Spin — loading indicators */
+@keyframes hs-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Shimmer — skeleton loading */
+@keyframes hs-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+/* Glow pulse — brand accents */
+@keyframes hs-glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px var(--hs-cyan-glow); }
+  50%      { box-shadow: 0 0 28px var(--hs-cyan-glow); }
+}
+
+/* Float — ambient UI elements */
+@keyframes hs-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+/* Scan — data sweep */
+@keyframes hs-scan {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* Gradient text shimmer */
+@keyframes hs-gradient-shimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Orb pulse — ambient glow */
+@keyframes hs-orb-pulse {
+  0%   { transform: scale(1) translate(0, 0); }
+  50%  { transform: scale(1.08) translate(12px, -12px); }
+  100% { transform: scale(0.96) translate(-8px, 8px); }
+}
+
+/* --- Utility animation classes ---------------------------------------- */
+.hs-animate-pulse      { animation: hs-pulse 2s ease-in-out infinite; }
+.hs-animate-pulse-glow { animation: hs-pulse-glow 2s ease-in-out infinite; }
+.hs-animate-fade-in    { animation: hs-fade-in var(--hs-duration-normal) var(--hs-ease-out); }
+.hs-animate-slide-up   { animation: hs-slide-up var(--hs-duration-slow) var(--hs-ease-out); }
+.hs-animate-scale-in   { animation: hs-scale-in var(--hs-duration-slow) var(--hs-ease-out); }
+.hs-animate-spin       { animation: hs-spin 1s linear infinite; }
+.hs-animate-float      { animation: hs-float 4s ease-in-out infinite; }
+
+/* --- Reduced Motion --------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

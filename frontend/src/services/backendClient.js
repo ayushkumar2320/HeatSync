@@ -131,3 +131,7 @@ export async function runCurrentScenario(payload) {
     body: JSON.stringify(payload)
   });
 }
+
+export async function fetchCoolingPotentialGeoJson() {
+  return fetchJson('/city/cooling-potential/geojson');
+}
